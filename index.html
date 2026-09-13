@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=13">
 </head>
 <body>
   <div class="background-world" aria-hidden="true">
@@ -123,7 +123,7 @@
         <button id="cameraButton" class="primary-button" type="button">카메라 켜기</button>
         <button id="switchModeButton" class="secondary-button" type="button">가격 코드 스캔</button>
       </div>
-      <button id="captureScanButton" class="capture-scan-button" type="button" disabled>📷 촬영해서 코드 인식</button>
+      <button id="captureScanButton" class="capture-scan-button" type="button">📷 촬영해서 코드 인식</button>
       <button id="promotionPhotoButton" class="promotion-button" type="button">행사표 사진 인식 · 1+1 / 할인 적용</button>
       <input id="promotionPhoto" type="file" accept="image/*" capture="environment" hidden>
       <button id="discountRateButton" class="discount-rate-button" type="button">선택한 상품 할인율 직접 입력</button>
@@ -230,6 +230,6 @@
 
   <div id="toast" class="toast" role="status"></div>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="app.js"></script>
+  <script src="app.js?v=13"></script>
 </body>
 </html>

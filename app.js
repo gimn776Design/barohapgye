@@ -553,7 +553,6 @@ async function startCamera() {
     els.cameraPlaceholder.hidden = true;
     els.cameraStage.classList.add('active');
     els.cameraButton.textContent = '카메라 끄기';
-    els.captureScanButton.disabled = false;
     els.scanStatus.textContent = '바코드나 QR이 초록색 안내선 안에 크게 보이도록 가까이 대주세요.';
     state.scanning = true;
     void scanLoop();
@@ -570,7 +569,6 @@ function stopCamera() {
   els.cameraPlaceholder.hidden = false;
   els.cameraStage.classList.remove('active');
   els.cameraButton.textContent = '카메라 켜기';
-  els.captureScanButton.disabled = true;
 }
 
 async function createBarcodeDetector() {
@@ -583,7 +581,18 @@ async function createBarcodeDetector() {
 }
 
 async function captureAndScan() {
-  if (!state.stream || els.video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return showToast('카메라 화면이 준비될 때까지 잠시 기다려주세요.');
+  if (!state.stream) {
+    await startCamera();
+    if (!state.stream) return showToast('카메라를 켠 뒤 다시 눌러주세요.');
+  }
+  if (els.video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+    await new Promise((resolve) => {
+      const done = () => resolve();
+      els.video.addEventListener('loadeddata', done, { once: true });
+      setTimeout(done, 1200);
+    });
+  }
+  if (els.video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return showToast('카메라 화면이 준비되지 않았습니다. 잠시 후 다시 눌러주세요.');
   els.captureScanButton.disabled = true;
   els.cameraStage.classList.add('capturing');
   try {
@@ -606,7 +615,7 @@ async function captureAndScan() {
     showToast('촬영한 화면을 읽지 못했습니다. 다시 시도해주세요.');
   } finally {
     setTimeout(() => els.cameraStage.classList.remove('capturing'), 180);
-    if (state.stream) els.captureScanButton.disabled = false;
+    els.captureScanButton.disabled = false;
   }
 }
 

@@ -1,0 +1,20 @@
+{
+  "name": "바로합계 - 장보기 자동 계산기",
+  "short_name": "바로합계",
+  "description": "상품 바코드와 행사표를 인식해 수량과 예상 결제 금액을 계산합니다.",
+  "lang": "ko-KR",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4f5fb",
+  "theme_color": "#10182c",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

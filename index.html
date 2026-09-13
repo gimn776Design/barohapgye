@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#10182c">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="바로합계">
+  <title>바로합계</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="background-world" aria-hidden="true">
+    <div class="bg-orb orb-one"></div><div class="bg-orb orb-two"></div><div class="bg-orb orb-three"></div>
+    <svg class="bg-friend apple-friend" viewBox="0 0 130 150" xmlns="http://www.w3.org/2000/svg"><path d="M67 35c-2-15 6-24 19-29" fill="none" stroke="#41634b" stroke-width="8" stroke-linecap="round"/><path d="M70 25c14-12 29-7 34 7-16 6-27 3-34-7Z" fill="#75d69a"/><path d="M65 34c36-15 58 12 57 47-1 39-25 61-57 61S9 120 8 81c-1-35 22-62 57-47Z" fill="#ff7e71" stroke="#563646" stroke-width="6"/><circle cx="48" cy="78" r="5" fill="#35283d"/><circle cx="82" cy="78" r="5" fill="#35283d"/><path d="M51 99c9 8 19 8 28 0" fill="none" stroke="#35283d" stroke-width="5" stroke-linecap="round"/><circle cx="31" cy="94" r="8" fill="#ffb1a9"/><circle cx="99" cy="94" r="8" fill="#ffb1a9"/></svg>
+    <svg class="bg-friend receipt-friend" viewBox="0 0 125 155" xmlns="http://www.w3.org/2000/svg"><path d="M18 8h89v132l-12-8-11 8-11-8-11 8-11-8-11 8-11-8-11 8Z" fill="#fff3bf" stroke="#55466c" stroke-width="6" stroke-linejoin="round"/><circle cx="46" cy="53" r="5" fill="#3b3150"/><circle cx="79" cy="53" r="5" fill="#3b3150"/><path d="M48 72c8 7 17 7 25 0" fill="none" stroke="#3b3150" stroke-width="5" stroke-linecap="round"/><path d="M38 94h49M38 109h35" stroke="#e5b84b" stroke-width="6" stroke-linecap="round"/></svg>
+    <svg class="bg-friend bottle-friend" viewBox="0 0 110 170" xmlns="http://www.w3.org/2000/svg"><path d="M39 9h32v25c0 8 18 16 18 35v72c0 13-10 21-22 21H43c-12 0-22-8-22-21V69c0-19 18-27 18-35Z" fill="#83ddff" stroke="#324664" stroke-width="6"/><path d="M39 22h32M23 91h64v43H23Z" fill="#6c62ed" stroke="#324664" stroke-width="5"/><circle cx="44" cy="108" r="4" fill="#fff"/><circle cx="66" cy="108" r="4" fill="#fff"/><path d="M46 121c6 5 12 5 18 0" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/></svg>
+  </div>
+  <main class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">SCAN & SUM</p>
+        <h1>바로합계</h1>
+        <p class="brand-copy">찍고, 담고, 한눈에 확인해요</p>
+      </div>
+      <button id="resetButton" class="text-button" type="button">장바구니 비우기</button>
+    </header>
+
+    <nav class="view-tabs" aria-label="화면 선택">
+      <button class="active" data-view="calculator" type="button">장보기 계산</button>
+      <button data-view="dashboard" type="button">지출·백업</button>
+    </nav>
+
+    <div id="calculatorView">
+
+    <section class="total-card" aria-live="polite">
+      <div class="mascot-wrap" aria-hidden="true">
+        <span class="mascot-bubble">오늘도 알뜰하게!</span>
+        <svg class="mascot" viewBox="0 0 220 210" xmlns="http://www.w3.org/2000/svg">
+          <ellipse cx="112" cy="192" rx="67" ry="12" fill="#0b1022" opacity=".22"/>
+          <path d="M61 78h110l-10 82a17 17 0 0 1-17 15H85a17 17 0 0 1-17-15Z" fill="#d8ff68" stroke="#11192d" stroke-width="7" stroke-linejoin="round"/>
+          <path d="M75 81c4-29 17-43 39-43 23 0 37 14 42 43" fill="none" stroke="#ff8a63" stroke-width="12" stroke-linecap="round"/>
+          <rect x="78" y="93" width="72" height="51" rx="19" fill="#fff" stroke="#11192d" stroke-width="6"/>
+          <circle cx="101" cy="116" r="5" fill="#11192d"/><circle cx="129" cy="116" r="5" fill="#11192d"/>
+          <path d="M104 130c7 6 15 6 22 0" fill="none" stroke="#11192d" stroke-width="5" stroke-linecap="round"/>
+          <circle cx="88" cy="130" r="7" fill="#ff8a8a" opacity=".65"/><circle cx="142" cy="130" r="7" fill="#ff8a8a" opacity=".65"/>
+          <path d="M68 107 45 96M162 107l23-11" stroke="#11192d" stroke-width="7" stroke-linecap="round"/>
+          <path d="M44 95c-7-5-12-1-12 5 0 8 9 11 15 5" fill="#ffbb57" stroke="#11192d" stroke-width="5"/>
+          <path d="M186 95c7-5 12-1 12 5 0 8-9 11-15 5" fill="#ffbb57" stroke="#11192d" stroke-width="5"/>
+          <path class="mascot-scan" d="M84 151h61" stroke="#6d4aff" stroke-width="7" stroke-linecap="round"/>
+          <path d="M87 176v10M143 176v10" stroke="#11192d" stroke-width="8" stroke-linecap="round"/>
+          <path d="M108 34V18M108 18l-10-7M108 18l10-7" stroke="#11192d" stroke-width="6" stroke-linecap="round"/>
+        </svg>
+        <span class="spark spark-one">✦</span><span class="spark spark-two">✦</span>
+      </div>
+      <span>현재 합계</span>
+      <strong id="grandTotal">0원</strong>
+      <p><b id="totalCount">0</b>개 상품</p>
+      <div class="purchase-date-row">
+        <label for="purchaseDate">이용 날짜</label>
+        <input id="purchaseDate" type="date">
+      </div>
+      <button id="savePurchaseButton" class="save-purchase-button" type="button">지출 기록 저장</button>
+    </section>
+
+    <button id="installButton" class="install-button" type="button" hidden>홈 화면에 앱 설치</button>
+    </div>
+
+    <section id="dashboardView" class="dashboard-view" hidden>
+      <div class="dashboard-header">
+        <div><p class="step-label">소비 리포트</p><h2>지출 한눈에 보기</h2></div>
+        <label class="month-filter">조회 월<input id="dashboardMonth" type="month"></label>
+      </div>
+      <section class="data-tools" aria-labelledby="dataToolsTitle">
+        <div><h3 id="dataToolsTitle">백업 및 내보내기</h3><p id="backupStatus">이 기기에만 저장 중</p></div>
+        <div class="data-tool-actions">
+          <button id="backupButton" type="button">전체 백업</button>
+          <button id="restoreButton" type="button">백업 가져오기</button>
+          <button id="csvButton" type="button">선택 월 CSV</button>
+        </div>
+        <input id="restoreFile" type="file" accept="application/json,.json" hidden>
+      </section>
+      <div class="kpi-grid">
+        <article class="kpi-card"><span>선택 월 지출</span><strong id="monthSpend">0원</strong></article>
+        <article class="kpi-card"><span>장보기 횟수</span><strong id="purchaseCount">0회</strong></article>
+        <article class="kpi-card"><span>구매 수량</span><strong id="monthItemCount">0개</strong></article>
+        <article class="kpi-card"><span>가장 많이 산 상품</span><strong id="topProduct">-</strong></article>
+      </div>
+      <div id="dashboardEmpty" class="dashboard-empty"><strong>선택한 달의 지출 기록이 없습니다.</strong><p>장보기 계산 화면에서 날짜를 정하고 기록을 저장해주세요.</p></div>
+      <div id="dashboardContent">
+        <article class="chart-card wide"><div class="chart-heading"><div><h3>최근 6개월 지출</h3><p>월별 총 결제 금액</p></div></div><canvas id="monthlyChart" height="230" aria-label="최근 6개월 지출 막대그래프"></canvas></article>
+        <div class="dashboard-grid">
+          <article class="chart-card"><div class="chart-heading"><div><h3>품목별 지출</h3><p>선택한 달의 금액 비중</p></div></div><canvas id="categoryChart" height="240" aria-label="품목별 지출 도넛그래프"></canvas><div id="categoryLegend" class="chart-legend"></div></article>
+          <article class="chart-card"><div class="chart-heading"><div><h3>자주 산 상품</h3><p>구매 수량 기준 상위 품목</p></div></div><div id="productRanking" class="product-ranking"></div></article>
+        </div>
+        <article class="chart-card wide"><div class="chart-heading"><div><h3>날짜별 이용 내역</h3><p>저장한 장보기 기록</p></div></div><div id="historyList" class="history-list"></div></article>
+      </div>
+    </section>
+
+    <section class="scanner-card">
+      <div class="section-heading">
+        <div>
+          <p class="step-label">카메라 스캔</p>
+          <h2 id="scannerTitle">상품 바코드를 보여주세요</h2>
+        </div>
+        <span id="modeBadge" class="badge">상품</span>
+      </div>
+
+      <div id="cameraStage" class="camera-stage">
+        <video id="video" playsinline muted></video>
+        <div class="scan-frame" aria-hidden="true"></div>
+        <div id="cameraPlaceholder" class="camera-placeholder">
+          <span class="camera-icon">▣</span>
+          <p>카메라를 켜면 바코드와 QR을 인식합니다.</p>
+        </div>
+      </div>
+
+      <div class="scanner-actions">
+        <button id="cameraButton" class="primary-button" type="button">카메라 켜기</button>
+        <button id="switchModeButton" class="secondary-button" type="button">가격 코드 스캔</button>
+      </div>
+      <button id="promotionPhotoButton" class="promotion-button" type="button">행사표 사진 인식 · 1+1 / 할인 적용</button>
+      <input id="promotionPhoto" type="file" accept="image/*" capture="environment" hidden>
+      <p id="scanStatus" class="status">상품 코드를 먼저 스캔하세요.</p>
+
+      <form id="quantityForm" class="manual-form">
+        <label id="quantityLabel" for="quantityInput">같은 상품 수량 입력</label>
+        <div class="input-row">
+          <input id="quantityInput" type="number" inputmode="numeric" min="1" step="1" placeholder="상품을 먼저 스캔하세요" required disabled>
+          <button id="quantitySubmit" type="submit" disabled>적용</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="cart-section">
+      <div class="section-heading">
+        <div>
+          <p class="step-label">장바구니</p>
+          <h2>스캔한 상품</h2>
+        </div>
+      </div>
+      <div id="cartList" class="cart-list"></div>
+      <div id="emptyState" class="empty-state">
+        <div>⌁</div>
+        <strong>아직 상품이 없어요</strong>
+        <p>상품 바코드를 스캔하면 여기에 표시됩니다.</p>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="productDialog">
+    <form id="productForm" method="dialog">
+      <div class="dialog-heading">
+        <p class="step-label">새 상품 등록</p>
+        <h2>상품 정보를 알려주세요</h2>
+        <p id="dialogCode" class="code-label"></p>
+      </div>
+      <label>상품명<input id="productName" placeholder="예: 코카콜라 500ml" required></label>
+      <label>품목<select id="productCategory"><option>식품</option><option>음료</option><option>생활용품</option><option>주방용품</option><option>건강·미용</option><option>반려동물</option><option>기타</option></select></label>
+      <label>단가 (원)<input id="productPrice" inputmode="numeric" pattern="[0-9,]*" placeholder="예: 2200" required></label>
+      <div class="dialog-actions">
+        <button id="cancelDialog" class="secondary-button" type="button">취소</button>
+        <button id="scanPriceDialog" class="secondary-button" type="button">가격 코드 스캔</button>
+        <button class="primary-button" type="submit">등록하고 담기</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="promotionDialog">
+    <form id="promotionForm" method="dialog">
+      <div class="dialog-heading">
+        <p class="step-label">행사 자동 적용</p>
+        <h2>인식된 행사 내용을 확인하세요</h2>
+        <p id="promotionProduct" class="code-label"></p>
+      </div>
+      <img id="promotionPreview" class="promotion-preview" alt="촬영한 행사 안내">
+      <label>사진에서 읽은 내용<textarea id="promotionText" rows="3" placeholder="예: 1+1 행사"></textarea></label>
+      <label>행사 종류
+        <select id="promotionType">
+          <option value="none">행사 없음</option><option value="plus">N+N 행사</option>
+          <option value="bundle">묶음 가격</option><option value="percent">퍼센트 할인</option><option value="amount">금액 할인</option>
+        </select>
+      </label>
+      <div id="promotionFields" class="promotion-fields"></div>
+      <p class="ocr-note">사진 인식은 틀릴 수 있습니다. 적용 전 숫자를 꼭 확인하세요.</p>
+      <div class="dialog-actions">
+        <button id="cancelPromotion" class="secondary-button" type="button">취소</button>
+        <button class="primary-button" type="submit">행사 적용</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="restoreDialog">
+    <form id="restoreForm" method="dialog">
+      <div class="dialog-heading">
+        <p class="step-label">데이터 복원</p>
+        <h2>백업을 어떻게 가져올까요?</h2>
+        <p id="restoreSummary" class="code-label"></p>
+      </div>
+      <label class="restore-option"><input type="radio" name="restoreMode" value="merge" checked><span><b>기존 데이터와 합치기</b><small>현재 기록은 유지하고 백업 기록을 추가합니다.</small></span></label>
+      <label class="restore-option danger-option"><input type="radio" name="restoreMode" value="replace"><span><b>모두 교체하기</b><small>현재 데이터는 지우고 백업 내용으로 바꿉니다.</small></span></label>
+      <div class="dialog-actions">
+        <button id="cancelRestore" class="secondary-button" type="button">취소</button>
+        <button class="primary-button" type="submit">가져오기</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status"></div>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

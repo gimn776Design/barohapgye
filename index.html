@@ -180,6 +180,22 @@
       </div>
       <img id="promotionPreview" class="promotion-preview" alt="촬영한 행사 안내">
       <label>사진에서 읽은 내용<textarea id="promotionText" rows="3" placeholder="예: 1+1 행사"></textarea></label>
+      <section class="event-lookup" aria-labelledby="eventLookupTitle">
+        <div><b id="eventLookupTitle">매장 행사 웹 검색</b><small>매장·지점·상품명으로 공개된 행사 정보를 찾습니다.</small></div>
+        <div class="event-store-row">
+          <select id="eventStore" aria-label="매장 선택">
+            <option value="트레이더스">트레이더스</option><option value="이마트">이마트</option>
+            <option value="홈플러스">홈플러스</option><option value="롯데마트">롯데마트</option>
+            <option value="코스트코">코스트코</option><option value="기타 매장">기타 매장</option>
+          </select>
+          <input id="eventBranch" type="text" maxlength="40" placeholder="지점명(선택)">
+        </div>
+        <div class="event-search-actions">
+          <button id="eventWebSearch" type="button">웹에서 행사 찾기</button>
+          <button id="officialEventSearch" type="button">공식 사이트 중심 검색</button>
+        </div>
+      </section>
+      <div id="eventExplanation" class="event-explanation" aria-live="polite">행사표를 촬영하면 기간과 적용 조건을 정리해드려요.</div>
       <label>행사 종류
         <select id="promotionType">
           <option value="none">행사 없음</option><option value="plus">N+N 행사</option>

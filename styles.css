@@ -87,6 +87,15 @@ dialog form { padding: 24px; }
 dialog input { margin: 7px 0 15px; }
 .promotion-preview { display: block; width: 100%; max-height: 170px; margin: 0 0 15px; border-radius: 13px; object-fit: contain; background: #eef1f5; }
 .promotion-preview[hidden] { display: none !important; }
+.event-lookup { margin: 14px 0; padding: 14px; border: 1px solid #d9e1ef; border-radius: 15px; background: linear-gradient(120deg, #f7f9ff, #fff8f2); }
+.event-lookup > div:first-child { display: grid; gap: 3px; margin-bottom: 10px; }
+.event-lookup small { color: #748196; font-size: 11px; }
+.event-store-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.event-store-row select, .event-store-row input { min-height: 43px; }
+.event-search-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.event-search-actions button { min-height: 42px; padding: 6px 8px; border: 0; border-radius: 11px; color: white; background: linear-gradient(110deg, #2563eb, #7c3aed); font-size: 12px; font-weight: 850; }
+.event-search-actions button:last-child { color: #24533e; background: #dff8e9; }
+.event-explanation { margin: 0 0 14px; padding: 13px 14px; border-left: 4px solid #ff7a59; border-radius: 10px; color: #5d3a2e; background: #fff3e9; font-size: 12px; line-height: 1.6; }
 .promotion-fields { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 12px; }
 .promotion-fields label { margin: 0; }
 .promotion-fields input { margin: 6px 0 0; }
@@ -151,6 +160,7 @@ dialog input { margin: 7px 0 15px; }
   .data-tools { align-items: stretch; flex-direction: column; }
   .data-tool-actions { justify-content: stretch; }
   .data-tool-actions button { flex: 1; }
+  .event-store-row, .event-search-actions { grid-template-columns: 1fr; }
 }
 
 /* Vibrant grocery-app theme */

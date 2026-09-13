@@ -13,6 +13,7 @@ const els = {
   promotionPhotoButton: $('promotionPhotoButton'), promotionPhoto: $('promotionPhoto'), promotionDialog: $('promotionDialog'),
   discountRateButton: $('discountRateButton'), promotionForm: $('promotionForm'), promotionTitle: $('promotionTitle'), promotionProduct: $('promotionProduct'), promotionPreview: $('promotionPreview'),
   promotionText: $('promotionText'), promotionType: $('promotionType'), promotionFields: $('promotionFields'), cancelPromotion: $('cancelPromotion'),
+  eventStore: $('eventStore'), eventBranch: $('eventBranch'), eventWebSearch: $('eventWebSearch'), officialEventSearch: $('officialEventSearch'), eventExplanation: $('eventExplanation'),
   installButton: $('installButton'), calculatorView: $('calculatorView'), dashboardView: $('dashboardView'),
   purchaseDate: $('purchaseDate'), savePurchaseButton: $('savePurchaseButton'), dashboardMonth: $('dashboardMonth'),
   monthSpend: $('monthSpend'), purchaseCount: $('purchaseCount'), monthItemCount: $('monthItemCount'), topProduct: $('topProduct'),
@@ -107,6 +108,45 @@ function promotionLabel(promo) {
   if (promo.type === 'percent') return `${promo.percent}% 할인 적용`;
   if (promo.type === 'amount') return `${won(promo.amount)} 할인 적용`;
   return '';
+}
+
+function explainEvent(text) {
+  const source = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!source) return '행사표를 촬영하거나 행사 문구를 입력하면 기간과 적용 조건을 정리해드려요.';
+  const notes = [];
+  const detected = detectPromotion(source);
+  if (detected.type !== 'none') notes.push(`확인된 혜택: ${promotionLabel(detected)}`);
+  if (/구독권|구독 회원|subscription/i.test(source)) notes.push('구독권 보유 또는 등록이 필요한 행사로 보입니다.');
+  if (/신세계\s*포인트|포인트\s*(?:회원|적립)/i.test(source)) notes.push('포인트 회원 인증이나 적립 조건을 확인하세요.');
+  if (/카드|삼성|국민|신한|현대|농협|우리|하나/i.test(source)) notes.push('특정 결제수단 조건이 있을 수 있습니다.');
+  if (/점포별|지점별|입점\s*점포|일부\s*점포|매장별/i.test(source)) notes.push('지점별 적용 여부가 다를 수 있습니다.');
+  const period = source.match(/(?:행사\s*)?기간\s*[:：]?\s*([^※]{3,45})/i) || source.match(/\d{1,2}[./월]\s*\d{1,2}일?\s*(?:부터|~|-|–)\s*\d{1,2}[./월]\s*\d{1,2}일?/);
+  if (period) notes.push(`확인된 기간: ${(period[1] || period[0]).trim()}`);
+  if (!notes.length) notes.push('자동으로 확정할 할인 조건을 찾지 못했습니다. 웹 검색이나 매장 안내문으로 확인해주세요.');
+  return `${notes.join(' ')} 적용 전 상품·기간·지점·결제 조건을 꼭 확인하세요.`;
+}
+
+function updateEventExplanation() {
+  els.eventExplanation.textContent = explainEvent(els.promotionText.value);
+}
+
+function eventSearchQuery(officialOnly = false) {
+  const code = state.promotionCode || state.pendingCode;
+  const item = state.cart[code] || state.catalog[code];
+  const store = els.eventStore.value;
+  const branch = els.eventBranch.value.trim();
+  const eventWords = els.promotionText.value.replace(/\s+/g, ' ').trim().slice(0, 90);
+  const officialDomains = { '트레이더스': 'emart.com', '이마트': 'emart.com', '홈플러스': 'homeplus.co.kr', '롯데마트': 'lottemart.com', '코스트코': 'costco.co.kr' };
+  const parts = [store, branch, item?.name, eventWords, '행사 할인 기간 조건'];
+  if (officialOnly && officialDomains[store]) parts.push(`site:${officialDomains[store]}`);
+  return parts.filter(Boolean).join(' ');
+}
+
+function openEventSearch(officialOnly = false) {
+  const query = eventSearchQuery(officialOnly);
+  const url = `https://search.naver.com/search.naver?query=${encodeURIComponent(query)}`;
+  window.open(url, '_blank', 'noopener,noreferrer');
+  showToast(officialOnly ? '공식 사이트 중심 검색을 열었습니다.' : '매장 행사 검색을 열었습니다.');
 }
 
 function discountedUnitPrice(item) {
@@ -448,6 +488,7 @@ function openDiscountEditor(code) {
   els.promotionProduct.textContent = `${item.name} · 원래 단가 ${won(item.price)}`;
   els.promotionPreview.hidden = true;
   els.promotionText.value = '';
+  updateEventExplanation();
   els.promotionType.value = 'percent';
   renderPromotionFields(item.promotion?.type === 'percent' ? item.promotion : {});
   els.promotionDialog.showModal();
@@ -477,11 +518,13 @@ async function readPromotionPhoto(file) {
     const text = result.data.text.trim();
     const promo = detectPromotion(text);
     els.promotionText.value = text;
+    updateEventExplanation();
     els.promotionType.value = promo.type;
     renderPromotionFields(promo);
     showToast(promo.type === 'none' ? '자동 판별하지 못했어요. 직접 선택해주세요.' : '행사 내용을 찾았습니다.');
   } catch (_) {
     els.promotionText.value = '';
+    updateEventExplanation();
     showToast('사진을 읽지 못했어요. 직접 선택해주세요.');
   }
 }
@@ -601,7 +644,10 @@ els.promotionPhoto.addEventListener('change', () => {
 els.promotionText.addEventListener('input', () => {
   const promo = detectPromotion(els.promotionText.value);
   if (promo.type !== 'none') { els.promotionType.value = promo.type; renderPromotionFields(promo); }
+  updateEventExplanation();
 });
+els.eventWebSearch.addEventListener('click', () => openEventSearch(false));
+els.officialEventSearch.addEventListener('click', () => openEventSearch(true));
 els.promotionType.addEventListener('change', () => renderPromotionFields());
 els.cancelPromotion.addEventListener('click', () => els.promotionDialog.close());
 els.promotionForm.addEventListener('submit', (event) => {

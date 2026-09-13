@@ -47,6 +47,10 @@ video { width: 100%; height: 100%; object-fit: cover; filter: none !important; i
 .camera-stage:not(.active) .scan-frame { display: none; }
 
 .scanner-actions { gap: 10px; }
+.capture-scan-button { width: 100%; min-height: 54px; margin-top: 10px; border: 0; border-radius: 14px; color: #17233d; background: linear-gradient(105deg, #d8ff68, #9ff0bd); font-weight: 950; box-shadow: 0 9px 22px rgba(93,180,111,.2); }
+.capture-scan-button:disabled { color: #7f8b9f; background: #e9edf4; box-shadow: none; }
+.camera-stage.capturing::after { content: ''; z-index: 5; position: absolute; inset: 0; background: white; animation: cameraFlash .18s ease-out forwards; pointer-events: none; }
+@keyframes cameraFlash { from { opacity: .82; } to { opacity: 0; } }
 .promotion-button { width: 100%; min-height: 48px; margin-top: 10px; border: 1px solid #bcd0ff; border-radius: 13px; color: #155eef; background: #f1f6ff; font-weight: 800; }
 .discount-rate-button { width: 100%; min-height: 48px; margin-top: 9px; border: 0; border-radius: 13px; color: #fff; background: linear-gradient(110deg, #ff7657, #ec4899); font-weight: 900; box-shadow: 0 8px 20px rgba(236,72,153,.17); }
 .primary-button, .secondary-button, .manual-form button { min-height: 48px; border-radius: 13px; border: 0; font-weight: 800; }

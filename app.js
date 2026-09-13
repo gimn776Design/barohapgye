@@ -4,7 +4,7 @@ const state = { mode: 'product', pendingCode: null, promotionCode: null, pending
 
 const $ = (id) => document.getElementById(id);
 const els = {
-  video: $('video'), cameraStage: $('cameraStage'), cameraPlaceholder: $('cameraPlaceholder'), cameraButton: $('cameraButton'),
+  video: $('video'), cameraStage: $('cameraStage'), cameraPlaceholder: $('cameraPlaceholder'), cameraButton: $('cameraButton'), captureScanButton: $('captureScanButton'),
   switchModeButton: $('switchModeButton'), modeBadge: $('modeBadge'), scannerTitle: $('scannerTitle'), scanStatus: $('scanStatus'),
   quantityForm: $('quantityForm'), quantityInput: $('quantityInput'), quantityLabel: $('quantityLabel'), quantitySubmit: $('quantitySubmit'), cartList: $('cartList'), emptyState: $('emptyState'),
   grandTotal: $('grandTotal'), totalCount: $('totalCount'), resetButton: $('resetButton'), dialog: $('productDialog'),
@@ -553,6 +553,7 @@ async function startCamera() {
     els.cameraPlaceholder.hidden = true;
     els.cameraStage.classList.add('active');
     els.cameraButton.textContent = '카메라 끄기';
+    els.captureScanButton.disabled = false;
     els.scanStatus.textContent = '바코드나 QR이 초록색 안내선 안에 크게 보이도록 가까이 대주세요.';
     state.scanning = true;
     void scanLoop();
@@ -569,17 +570,50 @@ function stopCamera() {
   els.cameraPlaceholder.hidden = false;
   els.cameraStage.classList.remove('active');
   els.cameraButton.textContent = '카메라 켜기';
+  els.captureScanButton.disabled = true;
+}
+
+async function createBarcodeDetector() {
+  const wantedFormats = ['qr_code', 'ean_13', 'ean_8', 'code_128', 'upc_a', 'upc_e'];
+  const supportedFormats = await BarcodeDetector.getSupportedFormats?.();
+  const formats = supportedFormats?.length
+    ? wantedFormats.filter((format) => supportedFormats.includes(format))
+    : wantedFormats;
+  return new BarcodeDetector(formats.length ? { formats } : undefined);
+}
+
+async function captureAndScan() {
+  if (!state.stream || els.video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return showToast('카메라 화면이 준비될 때까지 잠시 기다려주세요.');
+  els.captureScanButton.disabled = true;
+  els.cameraStage.classList.add('capturing');
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = els.video.videoWidth;
+    canvas.height = els.video.videoHeight;
+    canvas.getContext('2d', { alpha: false }).drawImage(els.video, 0, 0);
+    const detector = await createBarcodeDetector();
+    const codes = await detector.detect(canvas);
+    if (!codes[0]?.rawValue) {
+      els.scanStatus.textContent = '코드를 찾지 못했습니다. 안내선 안에 바코드나 QR을 더 크게 맞춰 다시 촬영해주세요.';
+      showToast('코드를 찾지 못했어요. 가까이에서 다시 촬영해주세요.');
+      return;
+    }
+    navigator.vibrate?.(80);
+    acceptCode(codes[0].rawValue);
+    els.scanStatus.textContent = '사진에서 코드를 인식했습니다.';
+    showToast('촬영한 화면에서 코드를 인식했어요.');
+  } catch (_) {
+    showToast('촬영한 화면을 읽지 못했습니다. 다시 시도해주세요.');
+  } finally {
+    setTimeout(() => els.cameraStage.classList.remove('capturing'), 180);
+    if (state.stream) els.captureScanButton.disabled = false;
+  }
 }
 
 async function scanLoop() {
-  const wantedFormats = ['qr_code', 'ean_13', 'ean_8', 'code_128', 'upc_a', 'upc_e'];
   let detector;
   try {
-    const supportedFormats = await BarcodeDetector.getSupportedFormats?.();
-    const formats = supportedFormats?.length
-      ? wantedFormats.filter((format) => supportedFormats.includes(format))
-      : wantedFormats;
-    detector = new BarcodeDetector(formats.length ? { formats } : undefined);
+    detector = await createBarcodeDetector();
   } catch (_) {
     els.scanStatus.textContent = '이 기기에서 코드 인식기를 시작하지 못했습니다. Chrome을 최신 버전으로 업데이트해주세요.';
     stopCamera();
@@ -601,6 +635,7 @@ async function scanLoop() {
 }
 
 els.cameraButton.addEventListener('click', () => state.stream ? stopCamera() : startCamera());
+els.captureScanButton.addEventListener('click', captureAndScan);
 els.switchModeButton.addEventListener('click', () => setMode(state.mode === 'product' ? 'price' : 'product'));
 els.quantityForm.addEventListener('submit', (event) => {
   event.preventDefault();

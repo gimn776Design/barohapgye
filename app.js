@@ -1,10 +1,11 @@
 const savedCatalog = JSON.parse(localStorage.getItem('quickSumCatalog') || '{}');
 const savedPurchases = JSON.parse(localStorage.getItem('quickSumPurchases') || '[]');
-const state = { mode: 'product', pendingCode: null, promotionCode: null, pendingBackup: null, catalog: savedCatalog, cart: {}, purchases: savedPurchases, stream: null, scanning: false, lastScan: { value: '', at: 0 } };
+const state = { mode: 'product', pendingCode: null, pendingProductImage: null, promotionCode: null, pendingBackup: null, catalog: savedCatalog, cart: {}, purchases: savedPurchases, stream: null, scanning: false, lastScan: { value: '', at: 0 } };
 
 const $ = (id) => document.getElementById(id);
 const els = {
   video: $('video'), cameraStage: $('cameraStage'), cameraPlaceholder: $('cameraPlaceholder'), cameraButton: $('cameraButton'), captureScanButton: $('captureScanButton'),
+  productPhotoButton: $('productPhotoButton'), productPhoto: $('productPhoto'), productPhotoReady: $('productPhotoReady'), productPhotoPreview: $('productPhotoPreview'), productDialogPreview: $('productDialogPreview'),
   switchModeButton: $('switchModeButton'), modeBadge: $('modeBadge'), scannerTitle: $('scannerTitle'), scanStatus: $('scanStatus'),
   quantityForm: $('quantityForm'), quantityInput: $('quantityInput'), quantityLabel: $('quantityLabel'), quantitySubmit: $('quantitySubmit'), cartList: $('cartList'), emptyState: $('emptyState'),
   grandTotal: $('grandTotal'), totalCount: $('totalCount'), resetButton: $('resetButton'), dialog: $('productDialog'),
@@ -66,8 +67,16 @@ function addToCart(code) {
     els.dialogCode.textContent = `상품 코드: ${code}`;
     els.productName.value = '';
     els.productPrice.value = '';
+    els.productDialogPreview.hidden = !state.pendingProductImage;
+    if (state.pendingProductImage) els.productDialogPreview.src = state.pendingProductImage;
     els.dialog.showModal();
     return;
+  }
+  if (state.pendingProductImage) {
+    product.image = state.pendingProductImage;
+    if (state.cart[code]) state.cart[code].image = state.pendingProductImage;
+    saveCatalog();
+    clearPendingProductPhoto();
   }
   state.cart[code] ??= { ...product, code, quantity: 0 };
   state.cart[code].quantity += 1;
@@ -200,7 +209,7 @@ function render() {
   els.emptyState.hidden = items.length > 0;
   els.cartList.innerHTML = items.map((item) => `
     <article class="cart-item" data-code="${escapeHtml(item.code)}">
-      <div><h3>${escapeHtml(item.name)}</h3><p class="cart-meta">${cartPriceMeta(item)}</p>${item.promotion ? `<span class="promotion-tag">${escapeHtml(promotionLabel(item.promotion))}</span>` : ''}<button class="item-discount-button" data-action="discount" type="button">할인율</button></div>
+      <div class="cart-product-main">${item.image ? `<img class="cart-product-image" src="${item.image}" alt="">` : ''}<div><h3>${escapeHtml(item.name)}</h3><p class="cart-meta">${cartPriceMeta(item)}</p>${item.promotion ? `<span class="promotion-tag">${escapeHtml(promotionLabel(item.promotion))}</span>` : ''}<button class="item-discount-button" data-action="discount" type="button">할인율</button></div></div>
       <div class="item-total">${promotionTotal(item) !== item.price * item.quantity ? `<s>${won(item.price * item.quantity)}</s><strong>${won(promotionTotal(item))}</strong>` : won(promotionTotal(item))}
         <div class="quantity"><button data-action="minus" aria-label="수량 줄이기">−</button><button class="quantity-value" data-action="select" aria-label="수량 직접 입력">${item.quantity}</button><button data-action="plus" aria-label="수량 늘리기">＋</button></div>
       </div>
@@ -231,7 +240,36 @@ function cleanProduct(value) {
   if (!value || typeof value !== 'object' || typeof value.name !== 'string') return null;
   const price = Number(value.price);
   if (!Number.isFinite(price) || price < 0) return null;
-  return { name: value.name.slice(0, 200), price, category: typeof value.category === 'string' ? value.category.slice(0, 80) : '미분류' };
+  const image = typeof value.image === 'string' && /^data:image\/(?:jpeg|png|webp);base64,/.test(value.image) && value.image.length <= 400000 ? value.image : undefined;
+  return { name: value.name.slice(0, 200), price, category: typeof value.category === 'string' ? value.category.slice(0, 80) : '미분류', ...(image ? { image } : {}) };
+}
+
+function resizeProductPhoto(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => {
+      const image = new Image();
+      image.onerror = reject;
+      image.onload = () => {
+        const max = 420;
+        const scale = Math.min(1, max / Math.max(image.naturalWidth, image.naturalHeight));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+        canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+        canvas.getContext('2d', { alpha: false }).drawImage(image, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', .68));
+      };
+      image.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function clearPendingProductPhoto() {
+  state.pendingProductImage = null;
+  els.productPhotoReady.hidden = true;
+  els.productPhotoPreview.removeAttribute('src');
 }
 
 function cleanPromotion(value) {
@@ -645,6 +683,21 @@ async function scanLoop() {
 
 els.cameraButton.addEventListener('click', () => state.stream ? stopCamera() : startCamera());
 els.captureScanButton.addEventListener('click', captureAndScan);
+els.productPhotoButton.addEventListener('click', () => els.productPhoto.click());
+els.productPhoto.addEventListener('change', async () => {
+  const file = els.productPhoto.files[0];
+  els.productPhoto.value = '';
+  if (!file) return;
+  try {
+    state.pendingProductImage = await resizeProductPhoto(file);
+    els.productPhotoPreview.src = state.pendingProductImage;
+    els.productPhotoReady.hidden = false;
+    els.scanStatus.textContent = '상품 사진을 준비했습니다. 이제 바코드나 QR을 카메라에 맞추고 2단계 버튼을 누르세요.';
+    showToast('상품 사진이 준비됐어요. 이제 코드를 촬영하세요.');
+  } catch (_) {
+    showToast('상품 사진을 불러오지 못했습니다. 다시 촬영해주세요.');
+  }
+});
 els.switchModeButton.addEventListener('click', () => setMode(state.mode === 'product' ? 'price' : 'product'));
 els.quantityForm.addEventListener('submit', (event) => {
   event.preventDefault();
@@ -662,10 +715,11 @@ els.productForm.addEventListener('submit', (event) => {
   const price = Number(els.productPrice.value.replaceAll(',', ''));
   if (!name || !Number.isFinite(price)) return;
   const code = state.pendingCode;
-  state.catalog[code] = { name, price };
+  state.catalog[code] = { name, price, ...(state.pendingProductImage ? { image: state.pendingProductImage } : {}) };
   state.catalog[code].category = els.productCategory.value;
   saveCatalog();
   els.dialog.close();
+  clearPendingProductPhoto();
   addToCart(code);
   setMode('product');
 });

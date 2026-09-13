@@ -464,14 +464,27 @@ async function startCamera() {
     return;
   }
   try {
-    state.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+    state.stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 }
+      },
+      audio: false
+    });
     els.video.srcObject = state.stream;
     await els.video.play();
+    const track = state.stream.getVideoTracks()[0];
+    const capabilities = track?.getCapabilities?.() || {};
+    if (capabilities.focusMode?.includes('continuous')) {
+      await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
+    }
     els.cameraPlaceholder.hidden = true;
     els.cameraStage.classList.add('active');
     els.cameraButton.textContent = '카메라 끄기';
+    els.scanStatus.textContent = '바코드나 QR이 초록색 안내선 안에 크게 보이도록 가까이 대주세요.';
     state.scanning = true;
-    scanLoop();
+    void scanLoop();
   } catch (error) {
     els.scanStatus.textContent = '카메라 권한을 허용해주세요. HTTPS 또는 localhost에서 실행해야 합니다.';
   }
@@ -488,13 +501,31 @@ function stopCamera() {
 }
 
 async function scanLoop() {
-  const detector = new BarcodeDetector({ formats: ['qr_code', 'ean_13', 'ean_8', 'code_128', 'upc_a', 'upc_e'] });
+  const wantedFormats = ['qr_code', 'ean_13', 'ean_8', 'code_128', 'upc_a', 'upc_e'];
+  let detector;
+  try {
+    const supportedFormats = await BarcodeDetector.getSupportedFormats?.();
+    const formats = supportedFormats?.length
+      ? wantedFormats.filter((format) => supportedFormats.includes(format))
+      : wantedFormats;
+    detector = new BarcodeDetector(formats.length ? { formats } : undefined);
+  } catch (_) {
+    els.scanStatus.textContent = '이 기기에서 코드 인식기를 시작하지 못했습니다. Chrome을 최신 버전으로 업데이트해주세요.';
+    stopCamera();
+    return;
+  }
   while (state.scanning) {
     try {
-      const codes = await detector.detect(els.video);
-      if (codes[0]?.rawValue) acceptCode(codes[0].rawValue);
+      if (els.video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+        const codes = await detector.detect(els.video);
+        if (codes[0]?.rawValue) {
+          navigator.vibrate?.(60);
+          els.scanStatus.textContent = '인식했습니다. 같은 상품을 다시 비추면 수량이 추가됩니다.';
+          acceptCode(codes[0].rawValue);
+        }
+      }
     } catch (_) {}
-    await new Promise((resolve) => setTimeout(resolve, 220));
+    await new Promise((resolve) => setTimeout(resolve, 180));
   }
 }
 

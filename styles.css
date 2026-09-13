@@ -37,12 +37,13 @@ h2 { margin-bottom: 0; font-size: 20px; letter-spacing: -.03em; }
 .badge { padding: 7px 12px; border-radius: 999px; color: #155eef; background: #edf4ff; font-size: 13px; font-weight: 800; }
 .badge.price { color: #8a4b08; background: #fff2d8; }
 
-.camera-stage { position: relative; overflow: hidden; height: 260px; margin: 18px 0 14px; border-radius: 18px; background: #152038; }
-video { width: 100%; height: 100%; object-fit: cover; }
+.camera-stage { position: relative; overflow: hidden; height: clamp(360px, 55vh, 560px); margin: 18px 0 14px; border-radius: 18px; background: #152038; }
+video { width: 100%; height: 100%; object-fit: cover; filter: none !important; image-rendering: auto; }
 .camera-placeholder { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; padding: 24px; color: #bac5d7; background: #152038; }
+.camera-placeholder[hidden] { display: none !important; }
 .camera-placeholder p { margin: 10px 0 0; }
 .camera-icon { font-size: 44px; }
-.scan-frame { z-index: 2; position: absolute; left: 12%; right: 12%; top: 50%; height: 100px; transform: translateY(-50%); border: 2px solid rgba(255,255,255,.9); border-radius: 14px; box-shadow: 0 0 0 999px rgba(4, 12, 28, .25); pointer-events: none; }
+.scan-frame { z-index: 2; position: absolute; left: 8%; right: 8%; top: 50%; height: 34%; min-height: 150px; transform: translateY(-50%); border: 3px solid rgba(210,255,82,.95); border-radius: 18px; box-shadow: 0 0 0 999px rgba(4, 12, 28, .18), 0 0 22px rgba(210,255,82,.3); pointer-events: none; }
 .camera-stage:not(.active) .scan-frame { display: none; }
 
 .scanner-actions { gap: 10px; }
@@ -135,7 +136,8 @@ dialog input { margin: 7px 0 15px; }
 @media (max-width: 480px) {
   .app-shell { padding: 18px 12px 50px; }
   .scanner-card, .cart-section { padding: 16px; border-radius: 18px; }
-  .camera-stage { height: 225px; }
+  .camera-stage { height: min(62vh, 520px); min-height: 390px; }
+  .scan-frame { left: 6%; right: 6%; height: 40%; min-height: 165px; }
   .kpi-grid { grid-template-columns: 1fr 1fr; }
   .dashboard-grid { grid-template-columns: 1fr; }
   .history-row { grid-template-columns: 76px 1fr auto; }

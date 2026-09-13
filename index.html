@@ -125,6 +125,7 @@
       </div>
       <button id="promotionPhotoButton" class="promotion-button" type="button">행사표 사진 인식 · 1+1 / 할인 적용</button>
       <input id="promotionPhoto" type="file" accept="image/*" capture="environment" hidden>
+      <button id="discountRateButton" class="discount-rate-button" type="button">선택한 상품 할인율 직접 입력</button>
       <p id="scanStatus" class="status">상품 코드를 먼저 스캔하세요.</p>
 
       <form id="quantityForm" class="manual-form">
@@ -174,7 +175,7 @@
     <form id="promotionForm" method="dialog">
       <div class="dialog-heading">
         <p class="step-label">행사 자동 적용</p>
-        <h2>인식된 행사 내용을 확인하세요</h2>
+        <h2 id="promotionTitle">인식된 행사 내용을 확인하세요</h2>
         <p id="promotionProduct" class="code-label"></p>
       </div>
       <img id="promotionPreview" class="promotion-preview" alt="촬영한 행사 안내">

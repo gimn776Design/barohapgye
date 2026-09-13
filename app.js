@@ -11,7 +11,7 @@ const els = {
   productForm: $('productForm'), productName: $('productName'), productCategory: $('productCategory'), productPrice: $('productPrice'), dialogCode: $('dialogCode'),
   cancelDialog: $('cancelDialog'), scanPriceDialog: $('scanPriceDialog'), toast: $('toast'),
   promotionPhotoButton: $('promotionPhotoButton'), promotionPhoto: $('promotionPhoto'), promotionDialog: $('promotionDialog'),
-  promotionForm: $('promotionForm'), promotionProduct: $('promotionProduct'), promotionPreview: $('promotionPreview'),
+  discountRateButton: $('discountRateButton'), promotionForm: $('promotionForm'), promotionTitle: $('promotionTitle'), promotionProduct: $('promotionProduct'), promotionPreview: $('promotionPreview'),
   promotionText: $('promotionText'), promotionType: $('promotionType'), promotionFields: $('promotionFields'), cancelPromotion: $('cancelPromotion'),
   installButton: $('installButton'), calculatorView: $('calculatorView'), dashboardView: $('dashboardView'),
   purchaseDate: $('purchaseDate'), savePurchaseButton: $('savePurchaseButton'), dashboardMonth: $('dashboardMonth'),
@@ -109,6 +109,17 @@ function promotionLabel(promo) {
   return '';
 }
 
+function discountedUnitPrice(item) {
+  return item.promotion?.type === 'percent'
+    ? Math.round(item.price * (1 - item.promotion.percent / 100))
+    : item.price;
+}
+
+function cartPriceMeta(item) {
+  if (item.promotion?.type !== 'percent') return `단가 ${won(item.price)} · ${escapeHtml(item.code)}`;
+  return `단가 <s>${won(item.price)}</s> → <strong>${won(discountedUnitPrice(item))}</strong> · ${escapeHtml(item.code)}`;
+}
+
 function applyPrice(raw) {
   const price = parsePrice(raw);
   if (!Number.isFinite(price) || price < 0) return showToast('가격 코드를 읽지 못했어요.');
@@ -149,8 +160,8 @@ function render() {
   els.emptyState.hidden = items.length > 0;
   els.cartList.innerHTML = items.map((item) => `
     <article class="cart-item" data-code="${escapeHtml(item.code)}">
-      <div><h3>${escapeHtml(item.name)}</h3><p class="cart-meta">단가 ${won(item.price)} · ${escapeHtml(item.code)}</p>${item.promotion ? `<span class="promotion-tag">${escapeHtml(promotionLabel(item.promotion))}</span>` : ''}</div>
-      <div class="item-total">${won(promotionTotal(item))}
+      <div><h3>${escapeHtml(item.name)}</h3><p class="cart-meta">${cartPriceMeta(item)}</p>${item.promotion ? `<span class="promotion-tag">${escapeHtml(promotionLabel(item.promotion))}</span>` : ''}<button class="item-discount-button" data-action="discount" type="button">할인율</button></div>
+      <div class="item-total">${promotionTotal(item) !== item.price * item.quantity ? `<s>${won(item.price * item.quantity)}</s><strong>${won(promotionTotal(item))}</strong>` : won(promotionTotal(item))}
         <div class="quantity"><button data-action="minus" aria-label="수량 줄이기">−</button><button class="quantity-value" data-action="select" aria-label="수량 직접 입력">${item.quantity}</button><button data-action="plus" aria-label="수량 늘리기">＋</button></div>
       </div>
     </article>`).join('');
@@ -422,17 +433,34 @@ function renderPromotionFields(promo = {}) {
   const definitions = {
     plus: [['buy', '구매 수량', promo.buy ?? 1], ['free', '무료 수량', promo.free ?? 1]],
     bundle: [['count', '묶음 수량', promo.count ?? 2], ['bundlePrice', '묶음 가격(원)', promo.bundlePrice ?? '']],
-    percent: [['percent', '할인율(%)', promo.percent ?? '']], amount: [['amount', '개당 할인액(원)', promo.amount ?? '']], none: []
+    percent: [['percent', '할인율(%)', promo.percent ?? '', 100]], amount: [['amount', '개당 할인액(원)', promo.amount ?? '']], none: []
   };
-  els.promotionFields.innerHTML = definitions[els.promotionType.value].map(([name, label, value]) =>
-    `<label>${label}<input name="${name}" type="number" min="1" value="${value}" required></label>`).join('');
+  els.promotionFields.innerHTML = definitions[els.promotionType.value].map(([name, label, value, max]) =>
+    `<label>${label}<input name="${name}" type="number" inputmode="decimal" min="1" ${max ? `max="${max}"` : ''} value="${value}" required></label>`).join('');
+}
+
+function openDiscountEditor(code) {
+  const item = state.cart[code];
+  if (!item) return showToast('할인을 적용할 상품을 먼저 스캔하세요.');
+  state.promotionCode = code;
+  state.pendingCode = code;
+  els.promotionTitle.textContent = '상품 할인율을 입력하세요';
+  els.promotionProduct.textContent = `${item.name} · 원래 단가 ${won(item.price)}`;
+  els.promotionPreview.hidden = true;
+  els.promotionText.value = '';
+  els.promotionType.value = 'percent';
+  renderPromotionFields(item.promotion?.type === 'percent' ? item.promotion : {});
+  els.promotionDialog.showModal();
+  requestAnimationFrame(() => els.promotionFields.querySelector('input')?.focus());
 }
 
 async function readPromotionPhoto(file) {
   const code = state.pendingCode;
   if (!code || !state.catalog[code]) return showToast('먼저 등록된 상품을 스캔하세요.');
   state.promotionCode = code;
+  els.promotionTitle.textContent = '인식된 행사 내용을 확인하세요';
   els.promotionPreview.src = URL.createObjectURL(file);
+  els.promotionPreview.hidden = false;
   els.promotionProduct.textContent = `${state.catalog[code].name}에 적용`;
   els.promotionText.value = '사진의 글자를 읽는 중입니다…';
   els.promotionType.value = 'none';
@@ -564,6 +592,7 @@ els.promotionPhotoButton.addEventListener('click', () => {
   if (!state.pendingCode || !state.catalog[state.pendingCode]) return showToast('행사를 적용할 상품을 먼저 스캔하세요.');
   els.promotionPhoto.click();
 });
+els.discountRateButton.addEventListener('click', () => openDiscountEditor(state.pendingCode));
 els.promotionPhoto.addEventListener('change', () => {
   const file = els.promotionPhoto.files[0];
   if (file) readPromotionPhoto(file);
@@ -580,6 +609,7 @@ els.promotionForm.addEventListener('submit', (event) => {
   const data = Object.fromEntries(new FormData(els.promotionForm));
   const promo = { type: els.promotionType.value };
   for (const key of ['buy', 'free', 'count', 'bundlePrice', 'percent', 'amount']) if (data[key] !== undefined) promo[key] = Number(data[key]);
+  if (promo.type === 'percent' && (!Number.isFinite(promo.percent) || promo.percent <= 0 || promo.percent > 100)) return showToast('할인율은 1~100 사이로 입력해주세요.');
   const item = state.cart[state.promotionCode];
   if (!item) return showToast('장바구니에서 상품을 찾지 못했어요.');
   item.promotion = promo.type === 'none' ? null : promo;
@@ -595,6 +625,10 @@ els.cartList.addEventListener('click', (event) => {
     selectQuantityProduct(code);
     els.quantityInput.focus();
     els.quantityInput.select();
+    return;
+  }
+  if (button.dataset.action === 'discount') {
+    openDiscountEditor(code);
     return;
   }
   state.cart[code].quantity += button.dataset.action === 'plus' ? 1 : -1;

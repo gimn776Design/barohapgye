@@ -269,12 +269,15 @@ function parseProductAndPrice(text) {
     .replace(/(?:₩|￦)?\s*\d{1,3}(?:,\d{3})+\s*원?/g, ' ')
     .replace(/\d{3,7}\s*원/g, ' ')
     .replace(/\d+(?:[.,]\d+)?\s*(?:kg|㎏|킬로그램|g|그램|ml|mL|㎖|l|L|리터)/gi, ' ')
-    .replace(/\(\s*\d+\s*(?:인분|개입|입)\s*\)/g, ' ')
+    .replace(/[x×*]\s*\d+\s*(?:개입|개|입|팩|봉)?/gi, ' ')
+    .replace(/\(?\s*\d+\s*(?:인분|개입|입|팩|봉)\s*\)?/g, ' ')
     .replace(/정상가|판매가|구매가|회원가|행사가|할인가|할인|행사|바코드|카드|포인트|기간/gi, ' ')
       .replace(/\s+/g, ' ').trim();
     let score = Math.max(0, 6 - index);
     if (/\d+(?:[.,]\d+)?\s*(?:kg|㎏|g|그램|ml|mL|㎖|l|L|리터)/i.test(line)) score += 10;
     if (/[가-힣]{3,}/.test(cleaned)) score += 9;
+    if (/^[가-힣A-Za-z0-9][가-힣A-Za-z0-9 &'().+\-/]{2,45}$/.test(cleaned)) score += 4;
+    if ((cleaned.match(/[^가-힣A-Za-z0-9\s&'().+\-/]/g) || []).length > 2) score -= 8;
     if (cleaned.length >= 4 && cleaned.length <= 38) score += 5;
     if (/제조|사용|원산지|정석|비법|맛 그대로|얼큰|칼칼|100g당|적립|할인/.test(line)) score -= 8;
     return { line: cleaned, score };
@@ -284,7 +287,9 @@ function parseProductAndPrice(text) {
   let weightNumber = weightMatch?.[1]?.replace(',', '.') || '';
   const weightUnit = weightMatch?.[2]?.replace(/킬로그램|㎏/i, 'kg').replace(/그램/i, 'g').replace(/㎖/i, 'ml').replace(/리터/i, 'L') || '';
   if (/kg/i.test(weightUnit) && /^\d{4}$/.test(weightNumber) && Number(weightNumber) < 10000) weightNumber = `${weightNumber[0]}.${weightNumber.slice(1)}`;
-  const weight = weightMatch ? `${weightNumber}${weightUnit}` : '';
+  const packMatch = String(text || '').match(/[x×*]\s*(\d+)\s*(개입|개|입|팩|봉)?|\(?\s*(\d+)\s*(인분|개입|입|팩|봉)\s*\)?/i);
+  const pack = packMatch ? `${packMatch[1] || packMatch[3]}${packMatch[2] || packMatch[4] || '개'}` : '';
+  const weight = [weightMatch ? `${weightNumber}${weightUnit}` : '', pack].filter(Boolean).join(' × ');
   return { name: (nameCandidates[0]?.line || '').slice(0, 80), price: priced[0]?.value || '', weight, text: lines.join('\n').slice(0, 1500) };
 }
 
@@ -420,7 +425,8 @@ function normalizedProductName(value) {
 function cleanRecognizedProductName(value) {
   const text=String(value||'').replace(/^[\d\W_]+|[\W_]+$/g,' ').replace(/\s+/g,' ').trim();
   const korean=(text.match(/[가-힣]/g)||[]).length, latin=(text.match(/[A-Za-z]/g)||[]).length;
-  if(korean>=2 && latin>korean){const koreanOnly=(text.match(/[가-힣]{2,}/g)||[]).join(' ');const kind=productKind(koreanOnly,'');return kind||koreanOnly;}
+  const latinTokens=text.match(/[A-Za-z]{1,}/g)||[];
+  if(korean>=2 && latin>korean && latinTokens.length>=5){const koreanOnly=(text.match(/[가-힣]{2,}/g)||[]).join(' ');const kind=productKind(koreanOnly,'');return kind||koreanOnly;}
   return text;
 }
 
@@ -504,7 +510,7 @@ async function prepareOcrCanvas(file) {
 
 async function getProductOcrWorker() {
   if (!state.ocrWorkerPromise) {
-    state.ocrWorkerPromise = Tesseract.createWorker('kor', 1, {
+    state.ocrWorkerPromise = Tesseract.createWorker('kor+eng', 1, {
       logger: ({ status, progress }) => {
         if (status === 'recognizing text') els.scanStatus.textContent = `필요한 정보 인식 중 ${Math.round(progress * 100)}%`;
       }
@@ -575,8 +581,18 @@ async function recognizeSingleProductTitle(worker, canvas) {
   try {
     els.scanStatus.textContent = '한글 상품명 줄을 정밀하게 읽는 중입니다…';
     await worker.setParameters({ tessedit_pageseg_mode: '7', tessedit_char_whitelist: '', preserve_interword_spaces: '1' });
-    const result = await worker.recognize(cropProductTitleLine(canvas));
-    return result.data.text || '';
+    const titleCanvas = cropProductTitleLine(canvas);
+    const result = await worker.recognize(titleCanvas);
+    let best = result.data.text || '';
+    const useful = (best.match(/[가-힣A-Za-z]{2,}/g) || []).join('').length;
+    const noise = (best.match(/[^가-힣A-Za-z0-9\s.,()x×*+\-/]/g) || []).length;
+    if (useful < 4 || noise > 3) {
+      const alternate = await worker.recognize(makeBinaryCanvas(titleCanvas));
+      const alternateText = alternate.data.text || '';
+      const score = (value) => (value.match(/[가-힣]/g) || []).length * 3 + (value.match(/[A-Za-z]/g) || []).length - (value.match(/[^가-힣A-Za-z0-9\s.,()x×*+\-/]/g) || []).length * 3;
+      if (score(alternateText) > score(best)) best = alternateText;
+    }
+    return best;
   } finally {
     await worker.setParameters({ tessedit_pageseg_mode: '11', preserve_interword_spaces: '1' }).catch(() => {});
   }

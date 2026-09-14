@@ -328,7 +328,7 @@ function numericPriceFromText(text) {
     return { value, score };
   }).filter(({ value }) => value >= 100 && value <= 10000000);
   candidates.sort((a, b) => b.score - a.score || b.value - a.value);
-  return candidates[0]?.value || '';
+  return candidates[0]?.score >= 3 ? candidates[0].value : '';
 }
 
 function analyzeDiscountOffer(text, fallbackPrice = '') {
@@ -336,11 +336,14 @@ function analyzeDiscountOffer(text, fallbackPrice = '') {
   const values = [...source.matchAll(/(?<!\d)(?:\d{1,3}(?:,\d{3})+|\d{3,7})(?!\d)/g)]
     .map((match) => Number(match[0].replaceAll(',', '')))
     .filter((value) => value >= 100 && value <= 10000000);
-  const percentMatch = source.match(/(\d{1,2}(?:\.\d+)?)\s*%\s*(?:할인)?/);
+  const hasDiscountLanguage = /할인|행사가|할인가|쿠폰|회원가|특가|세일/i.test(source);
+  const percentMatch = hasDiscountLanguage
+    ? source.match(/(?:할인|행사|쿠폰|회원|특가|세일)[^\d%]{0,12}(\d{1,2}(?:\.\d+)?)\s*%|(\d{1,2}(?:\.\d+)?)\s*%[^가-힣A-Za-z0-9]{0,5}(?:할인|행사|쿠폰|회원|특가|세일)/i)
+    : null;
   const negativeMatch = source.match(/(?:-|−|–)\s*(\d{1,3}(?:,\d{3})+|\d{3,7})/) || source.match(/할인(?:액)?\s*[:：]?\s*(\d{1,3}(?:,\d{3})+|\d{3,7})\s*원?/);
   const amount = negativeMatch ? Number(negativeMatch[1].replaceAll(',', '')) : 0;
-  const type = percentMatch ? 'percent' : (amount ? 'amount' : 'none');
-  const discountValue = percentMatch ? Number(percentMatch[1]) : amount;
+  const type = percentMatch ? 'percent' : (amount && hasDiscountLanguage ? 'amount' : 'none');
+  const discountValue = percentMatch ? Number(percentMatch[1] || percentMatch[2]) : (hasDiscountLanguage ? amount : 0);
   let originalPrice = values.length ? Math.max(...values) : Number(fallbackPrice) || 0;
   if (type === 'none') originalPrice = Number(fallbackPrice) || originalPrice;
   const computedFinal = type === 'amount'
@@ -512,6 +515,21 @@ function cropPriceLabelCanvas(source) {
   return canvas;
 }
 
+function cropTightPriceLabelCanvas(source) {
+  const cropX = Math.round(source.width * .24);
+  const cropY = Math.round(source.height * .18);
+  const cropWidth = Math.round(source.width * .52);
+  const cropHeight = Math.round(source.height * .5);
+  const scale = Math.min(4, Math.max(2, 2600 / Math.max(cropWidth, cropHeight)));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(cropWidth * scale));
+  canvas.height = Math.max(1, Math.round(cropHeight * scale));
+  const ctx = canvas.getContext('2d', { alpha: false });
+  ctx.filter = 'grayscale(1) contrast(1.9)';
+  ctx.drawImage(source, cropX, cropY, cropWidth, cropHeight, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
 async function recognizeTitleRegion(worker, canvas) {
   try {
     els.scanStatus.textContent = '가격표의 상품명을 집중해서 읽는 중입니다…';
@@ -566,9 +584,11 @@ async function recognizeProductPhoto(file) {
       const worker = await getProductOcrWorker();
       const result = await worker.recognize(prepared.canvas);
       const focusedLabel = cropPriceLabelCanvas(prepared.canvas);
+      const tightLabel = cropTightPriceLabelCanvas(prepared.canvas);
       const titleText = await recognizeTitleRegion(worker, focusedLabel);
-      parsed = parseProductAndPrice(`${titleText}\n${result.data.text}`);
-      const verifiedPrice = await recognizePriceNumbers(worker, focusedLabel);
+      const tightText = await recognizeTitleRegion(worker, tightLabel);
+      parsed = parseProductAndPrice(`${tightText}\n${titleText}\n${result.data.text}`);
+      const verifiedPrice = await recognizePriceNumbers(worker, tightLabel);
       if (verifiedPrice && (!parsed.price || verifiedPrice > parsed.price * 1.5 || (parsed.price % 10 !== 0 && verifiedPrice % 10 === 0))) parsed.price = verifiedPrice;
     } catch (_) {
       parsed.text = '사진 글자 인식에 실패했습니다. 상품명과 가격을 직접 확인해주세요.';

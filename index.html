@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=18">
+  <link rel="stylesheet" href="styles.css?v=19">
 </head>
 <body>
   <div class="background-world" aria-hidden="true">
@@ -129,6 +129,11 @@
       <input id="productPhoto" type="file" accept="image/*" capture="environment" hidden>
       <div id="productPhotoReady" class="product-photo-ready" hidden>
         <img id="productPhotoPreview" alt="촬영한 가격표"><span>가격표 인식 완료<br><small>상품명과 금액을 장바구니에 등록했습니다.</small></span>
+      </div>
+      <div id="scanInsight" class="scan-insight" hidden>
+        <div><span>인식 상품</span><strong id="scanInsightName">-</strong></div>
+        <div><span>중량·품목</span><strong id="scanInsightDetail">-</strong></div>
+        <div><span>적용 가격</span><strong id="scanInsightPrice">-</strong><small id="scanInsightSource"></small></div>
       </div>
 
       <div class="legacy-scanner" aria-hidden="true">
@@ -278,6 +283,6 @@
 
   <div id="toast" class="toast" role="status"></div>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="app.js?v=18"></script>
+  <script src="app.js?v=19"></script>
 </body>
 </html>

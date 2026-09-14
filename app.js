@@ -6,6 +6,7 @@ const $ = (id) => document.getElementById(id);
 const els = {
   video: $('video'), cameraStage: $('cameraStage'), cameraPlaceholder: $('cameraPlaceholder'), cameraButton: $('cameraButton'), captureScanButton: $('captureScanButton'),
   productPhotoButton: $('productPhotoButton'), productPhoto: $('productPhoto'), productPhotoReady: $('productPhotoReady'), productPhotoPreview: $('productPhotoPreview'), productDialogPreview: $('productDialogPreview'), productOcrLabel: $('productOcrLabel'), productOcrText: $('productOcrText'),
+  scanInsight: $('scanInsight'), scanInsightName: $('scanInsightName'), scanInsightDetail: $('scanInsightDetail'), scanInsightPrice: $('scanInsightPrice'), scanInsightSource: $('scanInsightSource'),
   switchModeButton: $('switchModeButton'), modeBadge: $('modeBadge'), scannerTitle: $('scannerTitle'), scanStatus: $('scanStatus'),
   quantityForm: $('quantityForm'), quantityInput: $('quantityInput'), quantityLabel: $('quantityLabel'), quantitySubmit: $('quantitySubmit'), cartList: $('cartList'), emptyState: $('emptyState'),
   grandTotal: $('grandTotal'), totalCount: $('totalCount'), resetButton: $('resetButton'), dialog: $('productDialog'),
@@ -287,6 +288,55 @@ function inferCategory(name) {
   return '식품';
 }
 
+function normalizedProductName(value) {
+  return String(value || '').toLowerCase().replace(/\d+(?:[.,]\d+)?\s*(?:kg|g|ml|l|개입|입)/gi, '').replace(/[^가-힣a-z0-9]/g, '');
+}
+
+function findCatalogMatch(name) {
+  const target = normalizedProductName(name);
+  if (target.length < 3) return null;
+  let partial = null;
+  for (const [code, product] of Object.entries(state.catalog)) {
+    const candidate = normalizedProductName(product.name);
+    if (candidate === target) return { code, product };
+    if (!partial && Math.min(candidate.length, target.length) >= 5 && (candidate.includes(target) || target.includes(candidate))) partial = { code, product };
+  }
+  return partial;
+}
+
+function findRecentStorePrice(code, name) {
+  const store = els.purchaseStore.value;
+  const target = normalizedProductName(name);
+  const records = state.purchases.slice().sort((a, b) => b.date.localeCompare(a.date));
+  for (const record of records) {
+    if ((record.store || '미지정') !== store) continue;
+    const item = record.items.find((entry) => entry.code === code || (target && normalizedProductName(entry.name) === target));
+    if (item && Number.isFinite(Number(item.price))) return Number(item.price);
+  }
+  return null;
+}
+
+function showScanInsight(product, source) {
+  els.scanInsightName.textContent = product.name || '상품명 확인 필요';
+  els.scanInsightDetail.textContent = [product.weight, product.category].filter(Boolean).join(' · ') || '정보 없음';
+  els.scanInsightPrice.textContent = Number.isFinite(Number(product.price)) && Number(product.price) > 0 ? won(product.price) : '가격 확인 필요';
+  els.scanInsightSource.textContent = source;
+  els.scanInsight.hidden = false;
+}
+
+async function detectBarcodeFromPhoto(file) {
+  if (!('BarcodeDetector' in window)) return '';
+  try {
+    const bitmap = await createImageBitmap(file);
+    const detector = await createBarcodeDetector();
+    const codes = await detector.detect(bitmap);
+    bitmap.close?.();
+    return codes[0]?.rawValue ? String(codes[0].rawValue).trim() : '';
+  } catch (_) {
+    return '';
+  }
+}
+
 async function prepareOcrCanvas(file) {
   const bitmap = await createImageBitmap(file);
   const longest = Math.max(bitmap.width, bitmap.height);
@@ -361,6 +411,20 @@ async function recognizeProductPhoto(file) {
   els.productPhotoReady.hidden = false;
   let parsed = { name: '', price: '', weight: '', text: '' };
   let lowDetail = false;
+  const barcode = await detectBarcodeFromPhoto(file);
+  if (barcode && state.catalog[barcode]) {
+    const known = state.catalog[barcode];
+    const recentPrice = findRecentStorePrice(barcode, known.name);
+    if (recentPrice !== null) known.price = recentPrice;
+    known.image = state.pendingProductImage;
+    saveCatalog();
+    state.pendingCode = barcode;
+    showScanInsight(known, recentPrice !== null ? `${els.purchaseStore.value}의 최근 저장 가격` : '이전에 직접 저장한 가격');
+    clearPendingProductPhoto();
+    addToCart(barcode);
+    els.scanStatus.textContent = `${known.name} · ${won(known.price)} 자동 등록 완료`;
+    return true;
+  }
   if (window.Tesseract) {
     try {
       els.scanStatus.textContent = '사진을 선명하게 보정하는 중입니다…';
@@ -373,9 +437,16 @@ async function recognizeProductPhoto(file) {
       parsed.text = '사진 글자 인식에 실패했습니다. 상품명과 가격을 직접 확인해주세요.';
     }
   }
+  const priceReadFromPhoto = Boolean(parsed.price);
+  const match = findCatalogMatch(parsed.name);
   const key = parsed.name.toLowerCase().replace(/[^가-힣a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 70);
-  const code = `photo:${key || Date.now()}`;
-  const existing = state.catalog[code];
+  const code = barcode || match?.code || `photo:${key || Date.now()}`;
+  const existing = state.catalog[code] || match?.product;
+  const recentPrice = existing ? findRecentStorePrice(code, existing.name) : null;
+  if (!parsed.price && recentPrice !== null) parsed.price = recentPrice;
+  if (!parsed.price && existing?.price) parsed.price = existing.price;
+  if (!parsed.name && existing?.name) parsed.name = existing.name;
+  if (!parsed.weight && existing?.weight) parsed.weight = existing.weight;
   state.pendingCode = code;
   if (parsed.name && parsed.price) {
     state.catalog[code] = {
@@ -387,6 +458,10 @@ async function recognizeProductPhoto(file) {
       image: state.pendingProductImage
     };
     saveCatalog();
+    const source = !priceReadFromPhoto && recentPrice !== null && Number(parsed.price) === recentPrice
+      ? `${els.purchaseStore.value}의 최근 저장 가격`
+      : (!priceReadFromPhoto && existing ? '이전에 직접 저장한 가격' : '사진에서 읽은 가격');
+    showScanInsight(state.catalog[code], source);
     clearPendingProductPhoto();
     addToCart(code);
     els.scanStatus.textContent = `${parsed.name}${parsed.weight ? ` · ${parsed.weight}` : ''} · ${won(parsed.price)} 자동 등록 완료${lowDetail ? ' (사진이 흐려 결과를 확인해주세요)' : ''}`;
@@ -402,6 +477,7 @@ async function recognizeProductPhoto(file) {
   els.productOcrText.value = parsed.text || '사진에서 글자를 찾지 못했습니다.';
   els.productOcrLabel.hidden = false;
   els.dialog.showModal();
+  showScanInsight({ name: parsed.name, weight: parsed.weight, category: parsed.name ? inferCategory(parsed.name) : '', price: parsed.price }, '확인 가능한 가격 근거가 부족합니다.');
   els.scanStatus.textContent = parsed.name && parsed.price
     ? '상품명과 가격을 자동 입력했습니다. 내용을 확인한 뒤 등록해주세요.'
     : '일부 내용을 읽지 못했습니다. 등록창에서 상품명과 가격을 확인해주세요.';

@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=15">
+  <link rel="stylesheet" href="styles.css?v=16">
 </head>
 <body>
   <div class="background-world" aria-hidden="true">
@@ -73,7 +73,6 @@
         </select>
         <input id="purchaseBranch" type="text" maxlength="40" placeholder="지점명(선택)">
       </div>
-      <button id="savePurchaseButton" class="save-purchase-button" type="button">지출 기록 저장</button>
     </section>
 
     <button id="installButton" class="install-button" type="button" hidden>홈 화면에 앱 설치</button>
@@ -173,6 +172,10 @@
         <strong>아직 상품이 없어요</strong>
         <p>상품 바코드를 스캔하면 여기에 표시됩니다.</p>
       </div>
+      <div class="final-save-area">
+        <p><b>상품을 모두 등록하셨나요?</b><span>저장 전에 품목별 가격과 전체 합계를 한 번 더 확인합니다.</span></p>
+        <button id="savePurchaseButton" class="save-purchase-button" type="button" disabled>전체 상품 확인 후 최종 저장</button>
+      </div>
     </section>
   </main>
 
@@ -252,8 +255,26 @@
     </form>
   </dialog>
 
+  <dialog id="checkoutDialog">
+    <div class="checkout-dialog-content">
+      <div class="dialog-heading">
+        <p class="step-label">최종 저장 전 확인</p>
+        <h2>오늘 구매할 상품 전체</h2>
+        <p id="checkoutMeta" class="code-label"></p>
+      </div>
+      <div class="checkout-table-heading"><span>상품·개당 가격</span><span>수량</span><span>품목 합계</span></div>
+      <div id="checkoutItems" class="checkout-items"></div>
+      <div class="checkout-grand-total"><span>전체 결제 예정 금액</span><strong id="checkoutGrandTotal">0원</strong></div>
+      <p class="checkout-note">최종 저장하면 현재 장바구니가 하나의 지출 기록으로 저장되고 장바구니는 비워집니다.</p>
+      <div class="dialog-actions">
+        <button id="cancelCheckout" class="secondary-button" type="button">계속 상품 담기</button>
+        <button id="confirmPurchaseSave" class="primary-button" type="button">전체 지출 최종 저장</button>
+      </div>
+    </div>
+  </dialog>
+
   <div id="toast" class="toast" role="status"></div>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="app.js?v=15"></script>
+  <script src="app.js?v=16"></script>
 </body>
 </html>

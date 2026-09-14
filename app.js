@@ -21,7 +21,8 @@ const els = {
   dashboardEmpty: $('dashboardEmpty'), dashboardContent: $('dashboardContent'), monthlyChart: $('monthlyChart'),
   categoryChart: $('categoryChart'), categoryLegend: $('categoryLegend'), productRanking: $('productRanking'), historyList: $('historyList'),
   backupButton: $('backupButton'), restoreButton: $('restoreButton'), csvButton: $('csvButton'), restoreFile: $('restoreFile'),
-  restoreDialog: $('restoreDialog'), restoreForm: $('restoreForm'), restoreSummary: $('restoreSummary'), cancelRestore: $('cancelRestore'), backupStatus: $('backupStatus')
+  restoreDialog: $('restoreDialog'), restoreForm: $('restoreForm'), restoreSummary: $('restoreSummary'), cancelRestore: $('cancelRestore'), backupStatus: $('backupStatus'),
+  checkoutDialog: $('checkoutDialog'), checkoutMeta: $('checkoutMeta'), checkoutItems: $('checkoutItems'), checkoutGrandTotal: $('checkoutGrandTotal'), cancelCheckout: $('cancelCheckout'), confirmPurchaseSave: $('confirmPurchaseSave')
 };
 
 const won = (value) => `${Number(value).toLocaleString('ko-KR')}원`;
@@ -209,6 +210,7 @@ function render() {
   els.grandTotal.textContent = won(total);
   els.totalCount.textContent = count.toLocaleString('ko-KR');
   els.emptyState.hidden = items.length > 0;
+  els.savePurchaseButton.disabled = items.length === 0;
   els.cartList.innerHTML = items.map((item) => `
     <article class="cart-item" data-code="${escapeHtml(item.code)}">
       <div class="cart-product-main">${item.image ? `<img class="cart-product-image" src="${item.image}" alt="">` : ''}<div><h3>${escapeHtml(item.name)}</h3><p class="cart-meta">${cartPriceMeta(item)}</p>${item.promotion ? `<span class="promotion-tag">${escapeHtml(promotionLabel(item.promotion))}</span>` : ''}<button class="item-discount-button" data-action="discount" type="button">할인율</button></div></div>
@@ -417,11 +419,27 @@ function updateBackupStatus() {
   els.backupStatus.textContent = date ? `마지막 백업: ${date}` : '아직 백업하지 않았습니다.';
 }
 
-function saveCurrentPurchase() {
+function openPurchaseSummary() {
   const items = Object.values(state.cart);
   if (!items.length) return showToast('저장할 상품이 없습니다.');
   if (!els.purchaseDate.value) return showToast('이용 날짜를 선택해주세요.');
   if (!els.purchaseStore.value) return showToast('이용 매장을 선택해주세요.');
+  const storeName = `${els.purchaseStore.value}${els.purchaseBranch.value.trim() ? ` · ${els.purchaseBranch.value.trim()}` : ''}`;
+  els.checkoutMeta.textContent = `${els.purchaseDate.value} · ${storeName} · 총 ${items.reduce((sum, item) => sum + item.quantity, 0)}개`;
+  els.checkoutItems.innerHTML = items.map((item) => {
+    const discounted = discountedUnitPrice(item);
+    const unit = item.promotion?.type === 'percent' && discounted !== item.price
+      ? `<s>${won(item.price)}</s><b>${won(discounted)}</b>`
+      : `<b>${won(item.price)}</b>`;
+    return `<div class="checkout-row"><span><strong>${escapeHtml(item.name)}</strong><small>${unit}${item.promotion ? ` · ${escapeHtml(promotionLabel(item.promotion))}` : ''}</small></span><span>${item.quantity}개</span><strong>${won(promotionTotal(item))}</strong></div>`;
+  }).join('');
+  els.checkoutGrandTotal.textContent = won(items.reduce((sum, item) => sum + promotionTotal(item), 0));
+  els.checkoutDialog.showModal();
+}
+
+function saveCurrentPurchase() {
+  const items = Object.values(state.cart);
+  if (!items.length) return showToast('저장할 상품이 없습니다.');
   const record = {
     id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
     date: els.purchaseDate.value,
@@ -439,7 +457,7 @@ function saveCurrentPurchase() {
   render();
   els.dashboardMonth.value = record.date.slice(0, 7);
   showView('dashboard');
-  showToast('지출 기록을 저장했습니다.');
+  showToast('오늘의 전체 지출을 한 건으로 저장했습니다.');
 }
 
 function resetQuantityControl() {
@@ -859,7 +877,12 @@ els.resetButton.addEventListener('click', () => {
   }
 });
 document.querySelectorAll('.view-tabs button').forEach((button) => button.addEventListener('click', () => showView(button.dataset.view)));
-els.savePurchaseButton.addEventListener('click', saveCurrentPurchase);
+els.savePurchaseButton.addEventListener('click', openPurchaseSummary);
+els.cancelCheckout.addEventListener('click', () => els.checkoutDialog.close());
+els.confirmPurchaseSave.addEventListener('click', () => {
+  els.checkoutDialog.close();
+  saveCurrentPurchase();
+});
 els.dashboardMonth.addEventListener('change', renderDashboard);
 els.dashboardStore.addEventListener('change', renderDashboard);
 els.historyList.addEventListener('click', (event) => {

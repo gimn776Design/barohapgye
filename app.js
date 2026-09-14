@@ -274,6 +274,62 @@ function parseProductAndPrice(text) {
   return { name: (nameCandidates[0] || '').slice(0, 80), price: priced[0]?.value || '', weight, text: lines.join('\n').slice(0, 1500) };
 }
 
+function makeBinaryCanvas(source) {
+  const canvas = document.createElement('canvas');
+  canvas.width = source.width; canvas.height = source.height;
+  const ctx = canvas.getContext('2d', { alpha: false, willReadFrequently: true });
+  ctx.drawImage(source, 0, 0);
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const pixels = imageData.data;
+  const histogram = new Uint32Array(256);
+  for (let i = 0; i < pixels.length; i += 4) histogram[pixels[i]]++;
+  const total = canvas.width * canvas.height;
+  let sum = 0;
+  for (let i = 0; i < 256; i++) sum += i * histogram[i];
+  let backgroundWeight = 0, backgroundSum = 0, bestVariance = 0, threshold = 150;
+  for (let i = 0; i < 256; i++) {
+    backgroundWeight += histogram[i];
+    if (!backgroundWeight || backgroundWeight === total) continue;
+    const foregroundWeight = total - backgroundWeight;
+    backgroundSum += i * histogram[i];
+    const backgroundMean = backgroundSum / backgroundWeight;
+    const foregroundMean = (sum - backgroundSum) / foregroundWeight;
+    const variance = backgroundWeight * foregroundWeight * (backgroundMean - foregroundMean) ** 2;
+    if (variance > bestVariance) { bestVariance = variance; threshold = i; }
+  }
+  for (let i = 0; i < pixels.length; i += 4) {
+    const value = pixels[i] < threshold ? 0 : 255;
+    pixels[i] = value; pixels[i + 1] = value; pixels[i + 2] = value; pixels[i + 3] = 255;
+  }
+  ctx.putImageData(imageData, 0, 0);
+  return canvas;
+}
+
+function numericPriceFromText(text) {
+  const candidates = [...String(text || '').matchAll(/\d{1,3}(?:[,.\s]\d{3})+|\d{3,7}/g)].map((match) => {
+    const raw = match[0];
+    const value = Number(raw.replace(/[^0-9]/g, ''));
+    let score = /\d[,.\s]\d{3}/.test(raw) ? 4 : 0;
+    if (value % 10 === 0) score += 2;
+    if (value >= 1000 && value < 1000000) score += 1;
+    if (value >= 1000000) score -= 2;
+    return { value, score };
+  }).filter(({ value }) => value >= 100 && value <= 10000000);
+  candidates.sort((a, b) => b.score - a.score || b.value - a.value);
+  return candidates[0]?.value || '';
+}
+
+async function recognizePriceNumbers(worker, canvas) {
+  try {
+    els.scanStatus.textContent = '큰 가격 숫자를 다시 확인하는 중입니다…';
+    await worker.setParameters({ tessedit_pageseg_mode: '11', tessedit_char_whitelist: '0123456789,.' });
+    const result = await worker.recognize(makeBinaryCanvas(canvas));
+    return numericPriceFromText(result.data.text);
+  } finally {
+    await worker.setParameters({ tessedit_pageseg_mode: '11', tessedit_char_whitelist: '', preserve_interword_spaces: '1' }).catch(() => {});
+  }
+}
+
 function inferCategory(name) {
   const text = String(name || '');
   if (/소고기|쇠고기|한우|돼지|삼겹|목살|갈비|닭고기|오리|육류|스테이크/i.test(text)) return '축산';
@@ -433,6 +489,8 @@ async function recognizeProductPhoto(file) {
       const worker = await getProductOcrWorker();
       const result = await worker.recognize(prepared.canvas);
       parsed = parseProductAndPrice(result.data.text);
+      if (result.data.confidence < 42) parsed.name = '';
+      if (!parsed.price) parsed.price = await recognizePriceNumbers(worker, prepared.canvas);
     } catch (_) {
       parsed.text = '사진 글자 인식에 실패했습니다. 상품명과 가격을 직접 확인해주세요.';
     }

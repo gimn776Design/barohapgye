@@ -122,6 +122,18 @@ dialog input { margin: 7px 0 15px; }
 .product-dialog-preview { display: block; width: 100%; height: 245px; margin-bottom: 15px; border-radius: 14px; object-fit: contain; background: #eef1f5; }
 .product-dialog-preview[hidden] { display: none !important; }
 #productOcrLabel[hidden] { display: none !important; }
+.detected-discount-panel { margin: 2px 0 15px; padding: 14px; border: 1px solid #ffd1b8; border-radius: 15px; background: linear-gradient(120deg, #fff8e9, #fff0f1); }
+.detected-discount-panel[hidden] { display: none !important; }
+.discount-analysis-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 11px; }
+.discount-analysis-heading > span { padding: 5px 8px; border-radius: 999px; color: #286442; background: #dcf7e7; font-size: 10px; font-weight: 900; }
+.discount-analysis-heading > span.conditional { color: #9b3f13; background: #ffe4d3; }
+.detected-final-price { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 4px 0 10px; padding: 11px 12px; border-radius: 11px; color: #3d4960; background: white; }
+.detected-final-price span { font-size: 11px; font-weight: 750; }
+.detected-final-price strong { color: #e83e78; font-size: 20px; }
+.apply-condition { display: flex; align-items: flex-start; gap: 10px; margin: 0 !important; padding: 11px; border: 1px solid #efc7b3; border-radius: 11px; background: rgba(255,255,255,.72); }
+.apply-condition input { flex: 0 0 auto; width: 20px; min-height: 20px; margin: 1px 0 0; }
+.apply-condition span { display: grid; gap: 3px; }
+.apply-condition small { color: #7e6a61; font-size: 10px; font-weight: 500; }
 .promotion-preview[hidden] { display: none !important; }
 .event-lookup { margin: 14px 0; padding: 14px; border: 1px solid #d9e1ef; border-radius: 15px; background: linear-gradient(120deg, #f7f9ff, #fff8f2); }
 .event-lookup > div:first-child { display: grid; gap: 3px; margin-bottom: 10px; }
@@ -453,3 +465,4 @@ body { position: relative; overflow-x: hidden; background-size: 150% 150%; anima
 @media (prefers-reduced-motion: reduce) {
   body, .bg-orb, .bg-friend, .mascot-wrap, .mascot-bubble, .spark, .mascot-scan, .empty-state div { animation: none !important; }
 }
+

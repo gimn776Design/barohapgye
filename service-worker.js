@@ -1,5 +1,5 @@
-const CACHE_NAME = 'barohapgye-v20';
-const APP_SHELL = ['./', './index.html', './styles.css?v=20', './app.js?v=20', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
+const CACHE_NAME = 'barohapgye-v21';
+const APP_SHELL = ['./', './index.html', './styles.css?v=21', './app.js?v=21', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
@@ -28,3 +28,4 @@ self.addEventListener('fetch', (event) => {
       .catch(() => caches.match(event.request).then((cached) => cached || (event.request.mode === 'navigate' ? caches.match('./index.html') : Response.error())))
   );
 });
+

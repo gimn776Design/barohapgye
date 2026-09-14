@@ -11,6 +11,7 @@ const els = {
   quantityForm: $('quantityForm'), quantityInput: $('quantityInput'), quantityLabel: $('quantityLabel'), quantitySubmit: $('quantitySubmit'), cartList: $('cartList'), emptyState: $('emptyState'),
   grandTotal: $('grandTotal'), totalCount: $('totalCount'), resetButton: $('resetButton'), dialog: $('productDialog'),
   productForm: $('productForm'), productName: $('productName'), productWeight: $('productWeight'), productCategory: $('productCategory'), productPrice: $('productPrice'), dialogCode: $('dialogCode'),
+  detectedDiscountPanel: $('detectedDiscountPanel'), detectedDiscountType: $('detectedDiscountType'), detectedDiscountValue: $('detectedDiscountValue'), detectedDiscountCondition: $('detectedDiscountCondition'), detectedFinalPrice: $('detectedFinalPrice'), discountRequirementBadge: $('discountRequirementBadge'), applyDetectedDiscount: $('applyDetectedDiscount'),
   cancelDialog: $('cancelDialog'), scanPriceDialog: $('scanPriceDialog'), toast: $('toast'),
   promotionPhotoButton: $('promotionPhotoButton'), promotionPhoto: $('promotionPhoto'), promotionDialog: $('promotionDialog'),
   discountRateButton: $('discountRateButton'), promotionForm: $('promotionForm'), promotionTitle: $('promotionTitle'), promotionProduct: $('promotionProduct'), promotionPreview: $('promotionPreview'),
@@ -117,10 +118,11 @@ function promotionTotal(item) {
 
 function promotionLabel(promo) {
   if (!promo || promo.type === 'none') return '';
+  const condition = promo.condition ? ` · ${promo.condition}` : '';
   if (promo.type === 'plus') return `${promo.buy}+${promo.free} 적용`;
   if (promo.type === 'bundle') return `${promo.count}개 ${won(promo.bundlePrice)} 적용`;
-  if (promo.type === 'percent') return `${promo.percent}% 할인 적용`;
-  if (promo.type === 'amount') return `${won(promo.amount)} 할인 적용`;
+  if (promo.type === 'percent') return `${promo.percent}% 할인 적용${condition}`;
+  if (promo.type === 'amount') return `${won(promo.amount)} 할인 적용${condition}`;
   return '';
 }
 
@@ -256,22 +258,28 @@ function parseProductAndPrice(text) {
   const lines = String(text || '').split(/\r?\n/).map((line) => line.replace(/\s+/g, ' ').trim()).filter(Boolean);
   const priced = [];
   for (const line of lines) {
-    for (const match of line.matchAll(/(?:₩|￦)\s*(\d{1,3}(?:,\d{3})+|\d{3,7})|(\d{1,3}(?:,\d{3})+|\d{3,7})\s*원|(\d{1,3}(?:,\d{3})+)/g)) {
+    for (const match of line.matchAll(/(?:₩|￦)\s*(\d{1,3}(?:,\d{3})+|\d{3,7})(?!\d)|(?<!\d)(\d{1,3}(?:,\d{3})+|\d{3,7})\s*원|(?<!\d)(\d{1,3}(?:,\d{3})+)(?!\d)/g)) {
       const value = Number((match[1] || match[2] || match[3]).replaceAll(',', ''));
       if (value >= 100 && value <= 10000000) priced.push({ value, line, score: /행사|할인|판매|회원|최종|구매가/.test(line) ? 2 : 1 });
     }
   }
   priced.sort((a, b) => b.score - a.score || a.value - b.value);
-  const nameCandidates = lines.map((line) => line
+  const nameCandidates = lines.map((line, index) => {
+    const cleaned = line
     .replace(/(?:₩|￦)?\s*\d{1,3}(?:,\d{3})+\s*원?/g, ' ')
     .replace(/\d{3,7}\s*원/g, ' ')
     .replace(/정상가|판매가|구매가|회원가|행사가|할인가|할인|행사|바코드|카드|포인트|기간/gi, ' ')
-    .replace(/\s+/g, ' ').trim()
-  ).filter((line) => /[가-힣A-Za-z]{2}/.test(line) && !/^\d[\d\s.,%-]*$/.test(line))
-    .sort((a, b) => Math.min(b.length, 45) - Math.min(a.length, 45));
+      .replace(/\s+/g, ' ').trim();
+    let score = Math.max(0, 6 - index);
+    if (/\d+(?:[.,]\d+)?\s*(?:kg|㎏|g|그램|ml|mL|㎖|l|L|리터)/i.test(line)) score += 10;
+    if (cleaned.length >= 4 && cleaned.length <= 38) score += 5;
+    if (/제조|사용|원산지|정석|비법|맛 그대로|얼큰|칼칼|100g당|적립|할인/.test(line)) score -= 8;
+    return { line: cleaned, score };
+  }).filter(({ line }) => /[가-힣A-Za-z]{2}/.test(line) && !/^\d[\d\s.,%-]*$/.test(line))
+    .sort((a, b) => b.score - a.score || Math.min(b.line.length, 45) - Math.min(a.line.length, 45));
   const weightMatch = String(text || '').match(/(\d+(?:[.,]\d+)?)\s*(kg|㎏|킬로그램|g|그램|ml|mL|㎖|l|L|리터)(?![A-Za-z])/i);
   const weight = weightMatch ? `${weightMatch[1].replace(',', '.')}${weightMatch[2].replace(/킬로그램|㎏/i, 'kg').replace(/그램/i, 'g').replace(/㎖/i, 'ml').replace(/리터/i, 'L')}` : '';
-  return { name: (nameCandidates[0] || '').slice(0, 80), price: priced[0]?.value || '', weight, text: lines.join('\n').slice(0, 1500) };
+  return { name: (nameCandidates[0]?.line || '').slice(0, 80), price: priced[0]?.value || '', weight, text: lines.join('\n').slice(0, 1500) };
 }
 
 function makeBinaryCanvas(source) {
@@ -306,7 +314,7 @@ function makeBinaryCanvas(source) {
 }
 
 function numericPriceFromText(text) {
-  const candidates = [...String(text || '').matchAll(/\d{1,3}(?:[,.\s]\d{3})+|\d{3,7}/g)].map((match) => {
+  const candidates = [...String(text || '').matchAll(/(?<!\d)(?:\d{1,3}(?:[,.\s]\d{3})+|\d{3,7})(?!\d)/g)].map((match) => {
     const raw = match[0];
     const value = Number(raw.replace(/[^0-9]/g, ''));
     let score = /\d[,.\s]\d{3}/.test(raw) ? 4 : 0;
@@ -317,6 +325,58 @@ function numericPriceFromText(text) {
   }).filter(({ value }) => value >= 100 && value <= 10000000);
   candidates.sort((a, b) => b.score - a.score || b.value - a.value);
   return candidates[0]?.value || '';
+}
+
+function analyzeDiscountOffer(text, fallbackPrice = '') {
+  const source = String(text || '').replace(/\s+/g, ' ').trim();
+  const values = [...source.matchAll(/(?<!\d)(?:\d{1,3}(?:,\d{3})+|\d{3,7})(?!\d)/g)]
+    .map((match) => Number(match[0].replaceAll(',', '')))
+    .filter((value) => value >= 100 && value <= 10000000);
+  const percentMatch = source.match(/(\d{1,2}(?:\.\d+)?)\s*%\s*(?:할인)?/);
+  const negativeMatch = source.match(/(?:-|−|–)\s*(\d{1,3}(?:,\d{3})+|\d{3,7})/) || source.match(/할인(?:액)?\s*[:：]?\s*(\d{1,3}(?:,\d{3})+|\d{3,7})\s*원?/);
+  const amount = negativeMatch ? Number(negativeMatch[1].replaceAll(',', '')) : 0;
+  const type = percentMatch ? 'percent' : (amount ? 'amount' : 'none');
+  const discountValue = percentMatch ? Number(percentMatch[1]) : amount;
+  let originalPrice = values.length ? Math.max(...values) : Number(fallbackPrice) || 0;
+  if (type === 'none') originalPrice = Number(fallbackPrice) || originalPrice;
+  const computedFinal = type === 'amount'
+    ? Math.max(0, originalPrice - discountValue)
+    : type === 'percent' ? Math.round(originalPrice * (1 - discountValue / 100)) : originalPrice;
+  const matchingFinal = values.find((value) => value === computedFinal);
+  const conditions = [];
+  if (/신세계\s*포인트|포인트\s*(?:적립|회원|카드)/i.test(source)) conditions.push('포인트 적립/회원 조건');
+  if (/삼성|국민|신한|현대|롯데|농협|우리|하나|비씨|BC/i.test(source) && /카드|결제/i.test(source)) conditions.push('해당 카드 결제 조건');
+  if (/쿠폰|앱\s*전용/i.test(source)) conditions.push('쿠폰 또는 앱 사용 조건');
+  if (/구독권|구독\s*회원/i.test(source)) conditions.push('구독권/구독 회원 조건');
+  if (/회원가|멤버십/i.test(source)) conditions.push('회원/멤버십 조건');
+  if (/일부\s*점포|점포별|지점별|입점\s*점포/i.test(source)) conditions.push('지점별 적용 조건');
+  return {
+    type,
+    value: discountValue,
+    originalPrice,
+    finalPrice: matchingFinal || computedFinal,
+    conditional: conditions.length > 0,
+    condition: conditions.join(' · ') || (type !== 'none' ? '별도 조건 문구 없음' : '')
+  };
+}
+
+function updateDetectedDiscountPreview() {
+  const type = els.detectedDiscountType.value;
+  const value = Number(els.detectedDiscountValue.value) || 0;
+  const price = Number(els.productPrice.value.replaceAll(',', '')) || 0;
+  const finalPrice = type === 'amount' ? Math.max(0, price - value) : type === 'percent' ? Math.round(price * (1 - value / 100)) : price;
+  els.detectedFinalPrice.textContent = price ? won(finalPrice) : '-';
+}
+
+function showDetectedDiscount(offer) {
+  els.detectedDiscountPanel.hidden = offer.type === 'none';
+  els.detectedDiscountType.value = offer.type;
+  els.detectedDiscountValue.value = offer.value || '';
+  els.detectedDiscountCondition.value = offer.condition;
+  els.applyDetectedDiscount.checked = offer.type !== 'none' && !offer.conditional;
+  els.discountRequirementBadge.textContent = offer.conditional ? '조건부 할인' : '조건 없는 할인';
+  els.discountRequirementBadge.classList.toggle('conditional', offer.conditional);
+  updateDetectedDiscountPreview();
 }
 
 async function recognizePriceNumbers(worker, canvas) {
@@ -468,19 +528,6 @@ async function recognizeProductPhoto(file) {
   let parsed = { name: '', price: '', weight: '', text: '' };
   let lowDetail = false;
   const barcode = await detectBarcodeFromPhoto(file);
-  if (barcode && state.catalog[barcode]) {
-    const known = state.catalog[barcode];
-    const recentPrice = findRecentStorePrice(barcode, known.name);
-    if (recentPrice !== null) known.price = recentPrice;
-    known.image = state.pendingProductImage;
-    saveCatalog();
-    state.pendingCode = barcode;
-    showScanInsight(known, recentPrice !== null ? `${els.purchaseStore.value}의 최근 저장 가격` : '이전에 직접 저장한 가격');
-    clearPendingProductPhoto();
-    addToCart(barcode);
-    els.scanStatus.textContent = `${known.name} · ${won(known.price)} 자동 등록 완료`;
-    return true;
-  }
   if (window.Tesseract) {
     try {
       els.scanStatus.textContent = '사진을 선명하게 보정하는 중입니다…';
@@ -489,7 +536,7 @@ async function recognizeProductPhoto(file) {
       const worker = await getProductOcrWorker();
       const result = await worker.recognize(prepared.canvas);
       parsed = parseProductAndPrice(result.data.text);
-      if (result.data.confidence < 42) parsed.name = '';
+      if (result.data.confidence < 25) parsed.name = '';
       if (!parsed.price) parsed.price = await recognizePriceNumbers(worker, prepared.canvas);
     } catch (_) {
       parsed.text = '사진 글자 인식에 실패했습니다. 상품명과 가격을 직접 확인해주세요.';
@@ -499,46 +546,32 @@ async function recognizeProductPhoto(file) {
   const match = findCatalogMatch(parsed.name);
   const key = parsed.name.toLowerCase().replace(/[^가-힣a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 70);
   const code = barcode || match?.code || `photo:${key || Date.now()}`;
-  const existing = state.catalog[code] || match?.product;
+  const existing = state.catalog[barcode] || state.catalog[code] || match?.product;
   const recentPrice = existing ? findRecentStorePrice(code, existing.name) : null;
   if (!parsed.price && recentPrice !== null) parsed.price = recentPrice;
   if (!parsed.price && existing?.price) parsed.price = existing.price;
   if (!parsed.name && existing?.name) parsed.name = existing.name;
   if (!parsed.weight && existing?.weight) parsed.weight = existing.weight;
+  const offer = analyzeDiscountOffer(parsed.text, parsed.price || existing?.price);
+  if (offer.originalPrice) parsed.price = offer.originalPrice;
   state.pendingCode = code;
-  if (parsed.name && parsed.price) {
-    state.catalog[code] = {
-      ...(existing || {}),
-      name: parsed.name,
-      price: Number(parsed.price),
-      weight: parsed.weight,
-      category: existing?.category || inferCategory(parsed.name),
-      image: state.pendingProductImage
-    };
-    saveCatalog();
-    const source = !priceReadFromPhoto && recentPrice !== null && Number(parsed.price) === recentPrice
-      ? `${els.purchaseStore.value}의 최근 저장 가격`
-      : (!priceReadFromPhoto && existing ? '이전에 직접 저장한 가격' : '사진에서 읽은 가격');
-    showScanInsight(state.catalog[code], source);
-    clearPendingProductPhoto();
-    addToCart(code);
-    els.scanStatus.textContent = `${parsed.name}${parsed.weight ? ` · ${parsed.weight}` : ''} · ${won(parsed.price)} 자동 등록 완료${lowDetail ? ' (사진이 흐려 결과를 확인해주세요)' : ''}`;
-    return true;
-  }
   els.dialogCode.textContent = '상품·가격표 사진으로 등록';
   els.productName.value = existing?.name || parsed.name;
   els.productWeight.value = existing?.weight || parsed.weight;
-  els.productPrice.value = existing?.price ?? parsed.price;
-  if (existing?.category) els.productCategory.value = existing.category;
+  els.productPrice.value = parsed.price || existing?.price || '';
+  els.productCategory.value = existing?.category || inferCategory(parsed.name);
   els.productDialogPreview.src = state.pendingProductImage;
   els.productDialogPreview.hidden = false;
   els.productOcrText.value = parsed.text || '사진에서 글자를 찾지 못했습니다.';
   els.productOcrLabel.hidden = false;
+  showDetectedDiscount(offer);
   els.dialog.showModal();
-  showScanInsight({ name: parsed.name, weight: parsed.weight, category: parsed.name ? inferCategory(parsed.name) : '', price: parsed.price }, '확인 가능한 가격 근거가 부족합니다.');
-  els.scanStatus.textContent = parsed.name && parsed.price
-    ? '상품명과 가격을 자동 입력했습니다. 내용을 확인한 뒤 등록해주세요.'
-    : '일부 내용을 읽지 못했습니다. 등록창에서 상품명과 가격을 확인해주세요.';
+  const shownPrice = offer.type !== 'none' ? offer.finalPrice : parsed.price;
+  const source = offer.type !== 'none'
+    ? (offer.conditional ? `조건부 할인 · ${offer.condition}` : '조건 없는 할인 감지')
+    : (!priceReadFromPhoto && recentPrice !== null ? `${els.purchaseStore.value}의 최근 저장 가격` : (!priceReadFromPhoto && existing ? '이전에 직접 저장한 가격' : '사진에서 읽은 가격'));
+  showScanInsight({ name: parsed.name, weight: parsed.weight, category: parsed.name ? inferCategory(parsed.name) : '', price: shownPrice }, source);
+  els.scanStatus.textContent = `인식 결과를 확인하고 필요한 내용을 수정해주세요.${lowDetail ? ' 사진이 흐려 특히 숫자를 확인해주세요.' : ''}`;
   return false;
 }
 
@@ -548,8 +581,9 @@ function cleanPromotion(value) {
   const positive = (key) => Number.isFinite(Number(value[key])) && Number(value[key]) > 0 ? Number(value[key]) : null;
   if (type === 'plus' && positive('buy') && positive('free')) return { type, buy: positive('buy'), free: positive('free') };
   if (type === 'bundle' && positive('count') && positive('bundlePrice')) return { type, count: positive('count'), bundlePrice: positive('bundlePrice') };
-  if (type === 'percent' && positive('percent') && positive('percent') <= 100) return { type, percent: positive('percent') };
-  if (type === 'amount' && positive('amount')) return { type, amount: positive('amount') };
+  const condition = typeof value.condition === 'string' ? value.condition.slice(0, 160) : '';
+  if (type === 'percent' && positive('percent') && positive('percent') <= 100) return { type, percent: positive('percent'), condition };
+  if (type === 'amount' && positive('amount')) return { type, amount: positive('amount'), condition };
   return null;
 }
 
@@ -1012,6 +1046,23 @@ els.quantityForm.addEventListener('submit', (event) => {
   showToast(`${item.name} 수량을 ${quantity}개로 변경했어요.`);
 });
 els.productPrice.addEventListener('input', () => { els.productPrice.value = els.productPrice.value.replace(/[^0-9]/g, ''); });
+els.productPrice.addEventListener('input', updateDetectedDiscountPreview);
+els.detectedDiscountType.addEventListener('change', updateDetectedDiscountPreview);
+els.detectedDiscountValue.addEventListener('input', updateDetectedDiscountPreview);
+els.detectedDiscountCondition.addEventListener('input', () => {
+  const conditional = Boolean(els.detectedDiscountCondition.value.trim()) && els.detectedDiscountCondition.value.trim() !== '별도 조건 문구 없음';
+  els.discountRequirementBadge.textContent = conditional ? '조건부 할인' : '조건 없는 할인';
+  els.discountRequirementBadge.classList.toggle('conditional', conditional);
+});
+els.productOcrText.addEventListener('change', () => {
+  const parsed = parseProductAndPrice(els.productOcrText.value);
+  if (parsed.name) els.productName.value = parsed.name;
+  if (parsed.weight) els.productWeight.value = parsed.weight;
+  const offer = analyzeDiscountOffer(els.productOcrText.value, parsed.price || els.productPrice.value);
+  if (offer.originalPrice) els.productPrice.value = offer.originalPrice;
+  els.productCategory.value = inferCategory(els.productName.value);
+  showDetectedDiscount(offer);
+});
 els.productForm.addEventListener('submit', (event) => {
   event.preventDefault();
   const name = els.productName.value.trim();
@@ -1025,6 +1076,14 @@ els.productForm.addEventListener('submit', (event) => {
   els.dialog.close();
   clearPendingProductPhoto();
   addToCart(code);
+  const discountType = els.detectedDiscountType.value;
+  const discountValue = Number(els.detectedDiscountValue.value);
+  if (els.applyDetectedDiscount.checked && discountType !== 'none' && discountValue > 0 && state.cart[code]) {
+    state.cart[code].promotion = discountType === 'amount'
+      ? { type: 'amount', amount: discountValue, condition: els.detectedDiscountCondition.value.trim() }
+      : { type: 'percent', percent: Math.min(100, discountValue), condition: els.detectedDiscountCondition.value.trim() };
+    render();
+  }
   setMode('product');
 });
 els.cancelDialog.addEventListener('click', () => els.dialog.close());
@@ -1181,3 +1240,4 @@ state.cart = JSON.parse(localStorage.getItem('quickSumCart') || '{}');
 refreshStoreFilter();
 updateBackupStatus();
 render();
+

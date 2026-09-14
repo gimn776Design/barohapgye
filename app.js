@@ -263,7 +263,7 @@ function parseProductAndPrice(text) {
       if (value >= 100 && value <= 10000000) priced.push({ value, line, score: /행사|할인|판매|회원|최종|구매가/.test(line) ? 2 : 1 });
     }
   }
-  priced.sort((a, b) => b.score - a.score || a.value - b.value);
+  priced.sort((a, b) => b.value - a.value || b.score - a.score);
   const nameCandidates = lines.map((line, index) => {
     const cleaned = line
     .replace(/(?:₩|￦)?\s*\d{1,3}(?:,\d{3})+\s*원?/g, ' ')
@@ -437,8 +437,9 @@ function findCatalogMatch(name) {
 }
 
 function findCatalogSignatureMatch(price, weight) {
-  if(!price||!weight)return null; const normalizedWeight=String(weight).toLowerCase().replace(/\s/g,'');
-  const matches=Object.entries(state.catalog).filter(([,product])=>Number(product.price)===Number(price)&&String(product.weight||'').toLowerCase().replace(/\s/g,'')===normalizedWeight);
+  if(!price)return null; const normalizedWeight=String(weight||'').toLowerCase().replace(/\s/g,'');
+  let matches=Object.entries(state.catalog).filter(([,product])=>Number(product.price)===Number(price));
+  if(normalizedWeight){const exactWeight=matches.filter(([,product])=>String(product.weight||'').toLowerCase().replace(/\s/g,'')===normalizedWeight);if(exactWeight.length)matches=exactWeight;}
   return matches.length===1?{code:matches[0][0],product:matches[0][1]}:null;
 }
 
@@ -630,7 +631,7 @@ async function recognizeProductPhoto(file) {
       parsed = parseProductAndPrice(`${tightText}\n${titleText}\n${result.data.text}`);
       parsed.name = cleanRecognizedProductName(parsed.name);
       const verifiedPrice = await recognizePriceNumbers(worker, tightLabel);
-      if (verifiedPrice && (!parsed.price || verifiedPrice > parsed.price * 1.5 || (parsed.price % 10 !== 0 && verifiedPrice % 10 === 0))) parsed.price = verifiedPrice;
+      if (verifiedPrice && (!parsed.price || (verifiedPrice > parsed.price * 1.5 && verifiedPrice % 10 === 0))) parsed.price = verifiedPrice;
     } catch (_) {
       parsed.text = '사진 글자 인식에 실패했습니다. 상품명과 가격을 직접 확인해주세요.';
     }

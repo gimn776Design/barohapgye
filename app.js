@@ -1,6 +1,6 @@
 const savedCatalog = JSON.parse(localStorage.getItem('quickSumCatalog') || '{}');
 const savedPurchases = JSON.parse(localStorage.getItem('quickSumPurchases') || '[]');
-const state = { mode: 'product', pendingCode: null, pendingProductImage: null, promotionCode: null, pendingBackup: null, catalog: savedCatalog, cart: {}, purchases: savedPurchases, stream: null, scanning: false, lastScan: { value: '', at: 0 } };
+const state = { mode: 'product', pendingCode: null, pendingProductImage: null, promotionCode: null, pendingBackup: null, catalog: savedCatalog, cart: {}, purchases: savedPurchases, stream: null, scanning: false, lastScan: { value: '', at: 0 }, ocrWorkerPromise: null };
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -9,7 +9,7 @@ const els = {
   switchModeButton: $('switchModeButton'), modeBadge: $('modeBadge'), scannerTitle: $('scannerTitle'), scanStatus: $('scanStatus'),
   quantityForm: $('quantityForm'), quantityInput: $('quantityInput'), quantityLabel: $('quantityLabel'), quantitySubmit: $('quantitySubmit'), cartList: $('cartList'), emptyState: $('emptyState'),
   grandTotal: $('grandTotal'), totalCount: $('totalCount'), resetButton: $('resetButton'), dialog: $('productDialog'),
-  productForm: $('productForm'), productName: $('productName'), productCategory: $('productCategory'), productPrice: $('productPrice'), dialogCode: $('dialogCode'),
+  productForm: $('productForm'), productName: $('productName'), productWeight: $('productWeight'), productCategory: $('productCategory'), productPrice: $('productPrice'), dialogCode: $('dialogCode'),
   cancelDialog: $('cancelDialog'), scanPriceDialog: $('scanPriceDialog'), toast: $('toast'),
   promotionPhotoButton: $('promotionPhotoButton'), promotionPhoto: $('promotionPhoto'), promotionDialog: $('promotionDialog'),
   discountRateButton: $('discountRateButton'), promotionForm: $('promotionForm'), promotionTitle: $('promotionTitle'), promotionProduct: $('promotionProduct'), promotionPreview: $('promotionPreview'),
@@ -67,6 +67,7 @@ function addToCart(code) {
     state.pendingCode = code;
     els.dialogCode.textContent = `상품 코드: ${code}`;
     els.productName.value = '';
+    els.productWeight.value = '';
     els.productPrice.value = '';
     els.productOcrText.value = '';
     els.productOcrLabel.hidden = true;
@@ -168,8 +169,9 @@ function discountedUnitPrice(item) {
 }
 
 function cartPriceMeta(item) {
-  if (item.promotion?.type !== 'percent') return `단가 ${won(item.price)} · ${escapeHtml(item.code)}`;
-  return `단가 <s>${won(item.price)}</s> → <strong>${won(discountedUnitPrice(item))}</strong> · ${escapeHtml(item.code)}`;
+  const weight = item.weight ? ` · ${escapeHtml(item.weight)}` : '';
+  if (item.promotion?.type !== 'percent') return `단가 ${won(item.price)}${weight}`;
+  return `단가 <s>${won(item.price)}</s> → <strong>${won(discountedUnitPrice(item))}</strong>${weight}`;
 }
 
 function applyPrice(raw) {
@@ -245,7 +247,8 @@ function cleanProduct(value) {
   const price = Number(value.price);
   if (!Number.isFinite(price) || price < 0) return null;
   const image = typeof value.image === 'string' && /^data:image\/(?:jpeg|png|webp);base64,/.test(value.image) && value.image.length <= 400000 ? value.image : undefined;
-  return { name: value.name.slice(0, 200), price, category: typeof value.category === 'string' ? value.category.slice(0, 80) : '미분류', ...(image ? { image } : {}) };
+  const weight = typeof value.weight === 'string' ? value.weight.slice(0, 40) : '';
+  return { name: value.name.slice(0, 200), price, weight, category: typeof value.category === 'string' ? value.category.slice(0, 80) : '미분류', ...(image ? { image } : {}) };
 }
 
 function parseProductAndPrice(text) {
@@ -265,16 +268,63 @@ function parseProductAndPrice(text) {
     .replace(/\s+/g, ' ').trim()
   ).filter((line) => /[가-힣A-Za-z]{2}/.test(line) && !/^\d[\d\s.,%-]*$/.test(line))
     .sort((a, b) => Math.min(b.length, 45) - Math.min(a.length, 45));
-  return { name: (nameCandidates[0] || '').slice(0, 80), price: priced[0]?.value || '', text: lines.join('\n').slice(0, 1500) };
+  const weightMatch = String(text || '').match(/(\d+(?:[.,]\d+)?)\s*(kg|㎏|킬로그램|g|그램|ml|mL|㎖|l|L|리터)(?![A-Za-z])/i);
+  const weight = weightMatch ? `${weightMatch[1].replace(',', '.')}${weightMatch[2].replace(/킬로그램|㎏/i, 'kg').replace(/그램/i, 'g').replace(/㎖/i, 'ml').replace(/리터/i, 'L')}` : '';
+  return { name: (nameCandidates[0] || '').slice(0, 80), price: priced[0]?.value || '', weight, text: lines.join('\n').slice(0, 1500) };
 }
 
 function inferCategory(name) {
   const text = String(name || '');
+  if (/소고기|쇠고기|한우|돼지|삼겹|목살|갈비|닭고기|오리|육류|스테이크/i.test(text)) return '축산';
+  if (/생선|고등어|갈치|연어|참치|새우|오징어|문어|조개|수산/i.test(text)) return '수산';
+  if (/사과|배\b|포도|딸기|수박|참외|귤|오렌지|바나나|채소|야채|상추|양파|감자|고구마/i.test(text)) return '농산';
+  if (/빵|베이글|케이크|도넛|크루아상|머핀|베이커리/i.test(text)) return '베이커리';
+  if (/스타벅스|투썸|메가커피|컴포즈|이디야|빽다방|카페/i.test(text)) return '카페';
   if (/커피|라떼|음료|주스|콜라|사이다|생수|우유|차\b/i.test(text)) return '음료';
   if (/세제|휴지|샴푸|비누|치약|물티슈|청소/i.test(text)) return '생활용품';
   if (/사료|간식.*(?:견|묘)|반려|강아지|고양이/i.test(text)) return '반려동물';
   if (/화장품|크림|로션|영양제|비타민/i.test(text)) return '건강·미용';
   return '식품';
+}
+
+async function prepareOcrCanvas(file) {
+  const bitmap = await createImageBitmap(file);
+  const longest = Math.max(bitmap.width, bitmap.height);
+  const target = Math.min(1800, Math.max(1200, longest));
+  const scale = Math.min(2, target / longest);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const ctx = canvas.getContext('2d', { alpha: false, willReadFrequently: true });
+  ctx.filter = 'grayscale(1) contrast(1.5)';
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close?.();
+  const sample = document.createElement('canvas');
+  sample.width = 120; sample.height = 120;
+  const sampleCtx = sample.getContext('2d', { willReadFrequently: true });
+  sampleCtx.drawImage(canvas, 0, 0, 120, 120);
+  const pixels = sampleCtx.getImageData(0, 0, 120, 120).data;
+  let detail = 0, comparisons = 0;
+  for (let y = 1; y < 119; y += 2) for (let x = 1; x < 119; x += 2) {
+    const i = (y * 120 + x) * 4;
+    detail += Math.abs(pixels[i] - pixels[i - 4]) + Math.abs(pixels[i] - pixels[i - 480]);
+    comparisons += 2;
+  }
+  return { canvas, lowDetail: comparisons ? detail / comparisons < 6 : false };
+}
+
+async function getProductOcrWorker() {
+  if (!state.ocrWorkerPromise) {
+    state.ocrWorkerPromise = Tesseract.createWorker('kor+eng', 1, {
+      logger: ({ status, progress }) => {
+        if (status === 'recognizing text') els.scanStatus.textContent = `필요한 정보 인식 중 ${Math.round(progress * 100)}%`;
+      }
+    }).then(async (worker) => {
+      await worker.setParameters({ tessedit_pageseg_mode: '11', preserve_interword_spaces: '1' });
+      return worker;
+    }).catch((error) => { state.ocrWorkerPromise = null; throw error; });
+  }
+  return state.ocrWorkerPromise;
 }
 
 function resizeProductPhoto(file) {
@@ -309,13 +359,15 @@ async function recognizeProductPhoto(file) {
   state.pendingProductImage = await resizeProductPhoto(file);
   els.productPhotoPreview.src = state.pendingProductImage;
   els.productPhotoReady.hidden = false;
-  let parsed = { name: '', price: '', text: '' };
+  let parsed = { name: '', price: '', weight: '', text: '' };
+  let lowDetail = false;
   if (window.Tesseract) {
     try {
-      els.scanStatus.textContent = '상품명과 가격을 읽는 중입니다…';
-      const result = await Tesseract.recognize(file, 'kor+eng', { logger: ({ status, progress }) => {
-        if (status === 'recognizing text') els.scanStatus.textContent = `상품·가격 인식 중 ${Math.round(progress * 100)}%`;
-      }});
+      els.scanStatus.textContent = '사진을 선명하게 보정하는 중입니다…';
+      const prepared = await prepareOcrCanvas(file);
+      lowDetail = prepared.lowDetail;
+      const worker = await getProductOcrWorker();
+      const result = await worker.recognize(prepared.canvas);
       parsed = parseProductAndPrice(result.data.text);
     } catch (_) {
       parsed.text = '사진 글자 인식에 실패했습니다. 상품명과 가격을 직접 확인해주세요.';
@@ -330,17 +382,19 @@ async function recognizeProductPhoto(file) {
       ...(existing || {}),
       name: parsed.name,
       price: Number(parsed.price),
+      weight: parsed.weight,
       category: existing?.category || inferCategory(parsed.name),
       image: state.pendingProductImage
     };
     saveCatalog();
     clearPendingProductPhoto();
     addToCart(code);
-    els.scanStatus.textContent = `${parsed.name} · ${won(parsed.price)} 자동 등록 완료`;
+    els.scanStatus.textContent = `${parsed.name}${parsed.weight ? ` · ${parsed.weight}` : ''} · ${won(parsed.price)} 자동 등록 완료${lowDetail ? ' (사진이 흐려 결과를 확인해주세요)' : ''}`;
     return true;
   }
   els.dialogCode.textContent = '상품·가격표 사진으로 등록';
   els.productName.value = existing?.name || parsed.name;
+  els.productWeight.value = existing?.weight || parsed.weight;
   els.productPrice.value = existing?.price ?? parsed.price;
   if (existing?.category) els.productCategory.value = existing.category;
   els.productDialogPreview.src = state.pendingProductImage;
@@ -435,8 +489,8 @@ function exportMonthlyCsv() {
   const store = els.dashboardStore.value;
   const records = state.purchases.filter((record) => record.date.startsWith(month) && (store === 'all' || (record.store || '미지정') === store));
   if (!records.length) return showToast('선택한 달의 내보낼 기록이 없습니다.');
-  const rows = [['이용 날짜', '매장', '지점', '상품명', '품목', '단가(원)', '수량', '행사', '최종 금액(원)']];
-  for (const record of records) for (const item of record.items) rows.push([record.date, record.store || '미지정', record.branch || '', item.name, item.category || '미분류', item.price, item.quantity, promotionLabel(item.promotion) || '없음', item.total]);
+  const rows = [['이용 날짜', '매장', '지점', '상품명', '중량·용량', '품목', '단가(원)', '수량', '행사', '최종 금액(원)']];
+  for (const record of records) for (const item of record.items) rows.push([record.date, record.store || '미지정', record.branch || '', item.name, item.weight || '', item.category || '미분류', item.price, item.quantity, promotionLabel(item.promotion) || '없음', item.total]);
   const csv = '\ufeff' + rows.map((row) => row.map(csvCell).join(',')).join('\r\n');
   downloadFile(csv, `barohapgye-expenses-${month}.csv`, 'text/csv;charset=utf-8');
   showToast(`${month} 지출 내역을 내보냈습니다.`);
@@ -459,7 +513,7 @@ function openPurchaseSummary() {
     const unit = item.promotion?.type === 'percent' && discounted !== item.price
       ? `<s>${won(item.price)}</s><b>${won(discounted)}</b>`
       : `<b>${won(item.price)}</b>`;
-    return `<div class="checkout-row"><span><strong>${escapeHtml(item.name)}</strong><small>${unit}${item.promotion ? ` · ${escapeHtml(promotionLabel(item.promotion))}` : ''}</small></span><span>${item.quantity}개</span><strong>${won(promotionTotal(item))}</strong></div>`;
+    return `<div class="checkout-row"><span><strong>${escapeHtml(item.name)}${item.weight ? ` · ${escapeHtml(item.weight)}` : ''}</strong><small>${unit}${item.promotion ? ` · ${escapeHtml(promotionLabel(item.promotion))}` : ''}</small></span><span>${item.quantity}개</span><strong>${won(promotionTotal(item))}</strong></div>`;
   }).join('');
   els.checkoutGrandTotal.textContent = won(items.reduce((sum, item) => sum + promotionTotal(item), 0));
   els.checkoutDialog.showModal();
@@ -474,7 +528,7 @@ function saveCurrentPurchase() {
     store: els.purchaseStore.value,
     branch: els.purchaseBranch.value.trim(),
     total: items.reduce((sum, item) => sum + promotionTotal(item), 0),
-    items: items.map((item) => ({ code: item.code, name: item.name, category: item.category || '미분류', price: item.price, quantity: item.quantity, promotion: item.promotion || null, total: promotionTotal(item) }))
+    items: items.map((item) => ({ code: item.code, name: item.name, weight: item.weight || '', category: item.category || '미분류', price: item.price, quantity: item.quantity, promotion: item.promotion || null, total: promotionTotal(item) }))
   };
   state.purchases.push(record);
   savePurchases();
@@ -801,11 +855,16 @@ els.productPhoto.addEventListener('change', async () => {
   const file = els.productPhoto.files[0];
   els.productPhoto.value = '';
   if (!file) return;
+  els.productPhotoButton.disabled = true;
+  els.productPhotoButton.textContent = '사진 분석 중…';
   try {
     const registered = await recognizeProductPhoto(file);
     showToast(registered ? '상품명과 금액을 자동 등록했어요.' : '읽지 못한 내용을 확인해주세요.');
   } catch (_) {
     showToast('상품·가격표를 읽지 못했습니다. 다시 촬영해주세요.');
+  } finally {
+    els.productPhotoButton.disabled = false;
+    els.productPhotoButton.textContent = '📷 스캔하기';
   }
 });
 els.switchModeButton.addEventListener('click', () => setMode(state.mode === 'product' ? 'price' : 'product'));
@@ -822,10 +881,11 @@ els.productPrice.addEventListener('input', () => { els.productPrice.value = els.
 els.productForm.addEventListener('submit', (event) => {
   event.preventDefault();
   const name = els.productName.value.trim();
+  const weight = els.productWeight.value.trim();
   const price = Number(els.productPrice.value.replaceAll(',', ''));
   if (!name || !Number.isFinite(price)) return;
   const code = state.pendingCode;
-  state.catalog[code] = { name, price, ...(state.pendingProductImage ? { image: state.pendingProductImage } : {}) };
+  state.catalog[code] = { name, price, weight, ...(state.pendingProductImage ? { image: state.pendingProductImage } : {}) };
   state.catalog[code].category = els.productCategory.value;
   saveCatalog();
   els.dialog.close();
@@ -972,6 +1032,12 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('./service-worker.js').catch(() => {
     console.warn('오프라인 사용 준비를 완료하지 못했습니다.');
   }));
+}
+
+if (window.Tesseract) {
+  const warmUpOcr = () => getProductOcrWorker().catch(() => {});
+  if ('requestIdleCallback' in window) requestIdleCallback(warmUpOcr, { timeout: 2500 });
+  else setTimeout(warmUpOcr, 900);
 }
 
 setMode('product');

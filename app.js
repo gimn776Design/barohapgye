@@ -24,7 +24,9 @@ const els = {
   categoryChart: $('categoryChart'), categoryLegend: $('categoryLegend'), productRanking: $('productRanking'), historyList: $('historyList'),
   backupButton: $('backupButton'), restoreButton: $('restoreButton'), csvButton: $('csvButton'), restoreFile: $('restoreFile'),
   restoreDialog: $('restoreDialog'), restoreForm: $('restoreForm'), restoreSummary: $('restoreSummary'), cancelRestore: $('cancelRestore'), backupStatus: $('backupStatus'),
-  checkoutDialog: $('checkoutDialog'), checkoutMeta: $('checkoutMeta'), checkoutItems: $('checkoutItems'), checkoutGrandTotal: $('checkoutGrandTotal'), cancelCheckout: $('cancelCheckout'), confirmPurchaseSave: $('confirmPurchaseSave')
+  checkoutDialog: $('checkoutDialog'), checkoutMeta: $('checkoutMeta'), checkoutItems: $('checkoutItems'), checkoutGrandTotal: $('checkoutGrandTotal'), cancelCheckout: $('cancelCheckout'), confirmPurchaseSave: $('confirmPurchaseSave'),
+  advisorForm: $('advisorForm'), advisorInput: $('advisorInput'), advisorMessages: $('advisorMessages'), priceTrendList: $('priceTrendList'), valueComparisonList: $('valueComparisonList'),
+  receiptPhotoButton: $('receiptPhotoButton'), receiptPhoto: $('receiptPhoto'), receiptCheckResult: $('receiptCheckResult')
 };
 
 const won = (value) => `${Number(value).toLocaleString('ko-KR')}원`;
@@ -847,6 +849,90 @@ function drawCategoryChart(categories) {
   els.categoryLegend.innerHTML = entries.map(([name, value], index) => `<div class="legend-row"><span class="legend-dot" style="background:${colors[index % colors.length]}"></span><span>${escapeHtml(name)}</span><b>${won(value)}</b></div>`).join('');
 }
 
+function allPurchasedItems(records = state.purchases) {
+  return records.flatMap((record) => record.items.map((item) => ({ ...item, store: record.store || '미지정', branch: record.branch || '', date: record.date })));
+}
+
+function discountStats(records) {
+  const items = allPurchasedItems(records);
+  const original = items.reduce((sum, item) => sum + Number(item.price) * Number(item.quantity), 0);
+  const paid = items.reduce((sum, item) => sum + Number(item.total), 0);
+  return { original, paid, saved: Math.max(0, original - paid), rate: original > 0 ? (original - paid) / original * 100 : 0 };
+}
+
+function answerAdvisor(question) {
+  const q = String(question).replace(/\s+/g, ' ').trim();
+  const yearMatch = q.match(/(20\d{2})년?/);
+  const year = yearMatch?.[1] || String(new Date().getFullYear());
+  const records = state.purchases.filter((record) => record.date.startsWith(year));
+  if (!records.length) return `${year}년의 저장된 지출 기록이 아직 없어요. 장보기를 최종 저장하면 분석할 수 있습니다.`;
+  const items = allPurchasedItems(records);
+  const byProduct = {}, byStore = {};
+  for (const item of items) {
+    byProduct[item.name] ??= { quantity: 0, amount: 0 };
+    byProduct[item.name].quantity += item.quantity; byProduct[item.name].amount += item.total;
+    byStore[item.store] ??= { visits: new Set(), amount: 0, products: {} };
+    byStore[item.store].visits.add(item.date); byStore[item.store].amount += item.total;
+    byStore[item.store].products[item.name] = (byStore[item.store].products[item.name] || 0) + item.quantity;
+  }
+  const products = Object.entries(byProduct).sort((a,b) => b[1].quantity-a[1].quantity);
+  const stores = Object.entries(byStore).sort((a,b) => b[1].visits.size-a[1].visits.size || b[1].amount-a[1].amount);
+  if (/가장.*많이.*산|자주.*산.*물품|최다.*상품/.test(q)) return `${year}년에 가장 많이 산 상품은 ‘${products[0][0]}’이며 ${products[0][1].quantity}개, 총 ${won(products[0][1].amount)}을 기록했어요.`;
+  if (/매장.*상품|어떤.*매장.*뭐|잘 팔/.test(q)) return stores.slice(0,5).map(([store,data]) => { const top=Object.entries(data.products).sort((a,b)=>b[1]-a[1])[0]; return `${store}: 내 기록에서는 ${top?.[0] || '-'} ${top?.[1] || 0}개`; }).join('\n') + '\n※ 매장 전체 판매량이 아니라 내 구매 기록 기준입니다.';
+  if (/매장|자주.*이용/.test(q)) { const [name,data]=stores[0]; return `${year}년에 가장 자주 이용한 매장은 ${name}으로 ${data.visits.size}일 방문했고, 총 ${won(data.amount)}을 사용했어요.`; }
+  if (/할인/.test(q) && /평균|년도|연도|율/.test(q)) { const s=discountStats(records); const previous=discountStats(state.purchases.filter(r=>r.date.startsWith(String(Number(year)-1)))); const comparison=previous.original?` 전년 ${previous.rate.toFixed(1)}%보다 ${(s.rate-previous.rate).toFixed(1)}%p ${s.rate>=previous.rate?'높아요':'낮아요'}.`:''; return `${year}년 기록의 평균 할인율은 ${s.rate.toFixed(1)}%예요.${comparison} 표시 단가 기준 ${won(s.original)}에서 ${won(s.saved)}을 절약해 ${won(s.paid)}을 결제했어요.`; }
+  if (/행사|언제/.test(q)) { const promo=items.filter(i=>i.promotion); if(!promo.length) return `${year}년에는 저장된 행사 적용 기록이 없어요. 향후 행사는 매장·지점별로 달라 실시간 공식 정보 확인이 필요합니다.`; const months={}; promo.forEach(i=>{const m=i.date.slice(0,7);months[m]=(months[m]||0)+1;}); const best=Object.entries(months).sort((a,b)=>b[1]-a[1])[0]; return `내 기록에서는 ${best[0]}에 행사 적용 상품이 ${best[1]}건으로 가장 많았어요. 미래 행사 일정은 공개된 공식 정보와 지점 안내를 확인해야 합니다.`; }
+  if (/인상|인하|가격.*변|올랐|내렸/.test(q)) { const trends=buildPriceTrends(); if(!trends.length) return '같은 상품을 두 번 이상 구매한 기록이 있어야 가격 변화를 계산할 수 있어요.'; const t=trends.sort((a,b)=>Math.abs(b.changeRate)-Math.abs(a.changeRate))[0]; return `${t.store}의 ‘${t.name}’ 가격은 최초 ${won(t.first)}에서 최근 ${won(t.latest)}으로 ${Math.abs(t.changeRate).toFixed(1)}% ${t.changeRate>=0?'인상':'인하'}됐어요.`; }
+  return `${year}년에는 ${records.length}번 장을 봤고 ${items.reduce((n,i)=>n+i.quantity,0)}개 상품에 총 ${won(records.reduce((s,r)=>s+r.total,0))}을 사용했어요. 상품·매장·할인율·가격 변화 중 하나를 질문해보세요.`;
+}
+
+function addAdvisorMessage(text, role) {
+  const div=document.createElement('div'); div.className=`advisor-message ${role}`; div.textContent=text; els.advisorMessages.appendChild(div); els.advisorMessages.scrollTop=els.advisorMessages.scrollHeight;
+}
+
+function buildPriceTrends() {
+  const groups={};
+  for(const item of allPurchasedItems()) { const key=`${item.store}|${normalizedProductName(item.name)}`; (groups[key]??=[]).push(item); }
+  return Object.values(groups).filter(list=>list.length>=2).map(list=>{list.sort((a,b)=>a.date.localeCompare(b.date));const prices=list.map(i=>Number(i.price));const first=prices[0],latest=prices.at(-1);return{name:list.at(-1).name,store:list[0].store,first,latest,average:prices.reduce((a,b)=>a+b,0)/prices.length,changeRate:first?((latest-first)/first*100):0,count:list.length};});
+}
+
+function unitInfo(weight) {
+  const match=String(weight||'').match(/(\d+(?:[.,]\d+)?)\s*(kg|g|ml|l|개입|개|입)/i); if(!match)return null;
+  let amount=Number(match[1].replace(',','.')); const unit=match[2].toLowerCase();
+  if(unit==='kg'||unit==='l') amount*=1000;
+  return /ml|l/.test(unit)?{amount,unit:'100ml',factor:100}:{amount,unit:/개|입/.test(unit)?'1개':'100g',factor:/개|입/.test(unit)?1:100};
+}
+
+function productKind(name, category) {
+  const kinds=['우유','두유','생수','콜라','커피','라면','김치','치즈','요거트','계란','달걀','휴지','세제','샴푸','고기','돼지고기','소고기','닭고기'];
+  return kinds.find(k=>String(name).includes(k)) || null;
+}
+
+function buildValueComparisons() {
+  const latest={}; for(const item of allPurchasedItems()){const key=`${item.store}|${normalizedProductName(item.name)}`;if(!latest[key]||latest[key].date<item.date)latest[key]=item;}
+  const groups={}; for(const item of Object.values(latest)){const unit=unitInfo(item.weight);const key=productKind(item.name,item.category);if(!unit||!key)continue;(groups[key]??=[]).push({...item,unitPrice:Number(item.price)/unit.amount*unit.factor,unitLabel:unit.unit});}
+  return Object.entries(groups).filter(([,list])=>list.length>=2).map(([kind,list])=>({kind,items:list.sort((a,b)=>a.unitPrice-b.unitPrice)}));
+}
+
+function renderAdvancedAnalysis() {
+  const trends=buildPriceTrends().sort((a,b)=>Math.abs(b.changeRate)-Math.abs(a.changeRate));
+  els.priceTrendList.innerHTML=trends.length?trends.slice(0,8).map(t=>`<div class="analysis-row"><strong>${escapeHtml(t.name)}</strong><span>${escapeHtml(t.store)} · 평균 ${won(Math.round(t.average))}</span><small>${won(t.first)} → ${won(t.latest)} · ${Math.abs(t.changeRate).toFixed(1)}% ${t.changeRate>=0?'인상':'인하'}</small></div>`).join(''):'<p class="cart-meta">같은 상품의 구매 기록이 2회 이상 쌓이면 표시됩니다.</p>';
+  const comparisons=buildValueComparisons();
+  els.valueComparisonList.innerHTML=comparisons.length?comparisons.slice(0,6).map(group=>{const best=group.items[0];return `<div class="analysis-row best"><strong>${escapeHtml(group.kind)} 추천: ${escapeHtml(best.name)}</strong><span>${escapeHtml(best.store)} · ${best.unitLabel}당 ${won(Math.round(best.unitPrice))}</span><small>${group.items.slice(0,3).map(i=>`${escapeHtml(i.name)} ${won(Math.round(i.unitPrice))}`).join(' / ')}</small></div>`;}).join(''):'<p class="cart-meta">같은 종류의 상품에 중량·용량을 입력하면 단위가격을 비교합니다.</p>';
+}
+
+function receiptPriceCandidates(text) {
+  const lines=String(text||'').split(/\r?\n/).map(v=>v.replace(/\s+/g,' ').trim()).filter(Boolean); const totals=[];
+  for(const line of lines){const nums=[...line.matchAll(/(?<!\d)(\d{1,3}(?:,\d{3})+|\d{3,7})(?!\d)/g)].map(m=>Number(m[1].replaceAll(',',''))).filter(n=>n>=100);if(nums.length)totals.push({value:Math.max(...nums),score:/합계|결제|받을|총액|카드/.test(line)?5:0});}
+  totals.sort((a,b)=>b.score-a.score||b.value-a.value); return totals[0]?.value||0;
+}
+
+async function checkReceipt(file) {
+  const cart=Object.values(state.cart); if(!cart.length){showToast('먼저 장바구니에 상품을 담아주세요.');return;}
+  els.receiptCheckResult.hidden=false; els.receiptCheckResult.className='receipt-check-result'; els.receiptCheckResult.innerHTML='<strong>영수증을 분석하는 중입니다…</strong>';
+  try {const prepared=await prepareOcrCanvas(file);const worker=await getProductOcrWorker();await worker.setParameters({tessedit_pageseg_mode:'6',tessedit_char_whitelist:'',preserve_interword_spaces:'1'});const result=await worker.recognize(prepared.canvas);await worker.setParameters({tessedit_pageseg_mode:'11',preserve_interword_spaces:'1'});const text=result.data.text||'';const receiptTotal=receiptPriceCandidates(text);const expected=cart.reduce((s,i)=>s+promotionTotal(i),0);const missing=cart.filter(item=>{const key=normalizedProductName(item.name);const tokens=String(item.name).match(/[가-힣]{2,}|[A-Za-z]{3,}/g)||[];return !(key&&normalizedProductName(text).includes(key))&&!tokens.some(t=>text.replace(/\s/g,'').includes(t));});const diff=receiptTotal?receiptTotal-expected:null;const ok=receiptTotal&&diff===0&&missing.length===0;els.receiptCheckResult.classList.add(ok?'ok':'warn');els.receiptCheckResult.innerHTML=`<strong>${ok?'계산 내용과 영수증이 일치합니다.':'확인이 필요한 차이가 있습니다.'}</strong><span>장바구니 예상 합계: ${won(expected)}${receiptTotal?`<br>영수증 결제 합계: ${won(receiptTotal)}<br>차이: ${diff>0?'+':''}${won(diff)}`:'<br>영수증 총액을 확실히 읽지 못했습니다.'}${missing.length?`<br>영수증에서 확인되지 않은 상품: ${missing.map(i=>escapeHtml(i.name)).join(', ')}`:''}</span>`;}catch(_){els.receiptCheckResult.classList.add('warn');els.receiptCheckResult.innerHTML='<strong>영수증을 읽지 못했습니다.</strong><span>영수증 전체가 평평하고 크게 보이도록 다시 촬영해주세요.</span>';}
+}
+
 function renderDashboard() {
   const month = els.dashboardMonth.value || localDate().slice(0, 7);
   const store = els.dashboardStore.value || 'all';
@@ -866,6 +952,7 @@ function renderDashboard() {
   const maxQty = ranking[0]?.[1].quantity || 1;
   els.productRanking.innerHTML = ranking.length ? ranking.slice(0, 5).map(([name, value], index) => `<div class="rank-row"><span class="rank-number">${index + 1}</span><span class="rank-name">${escapeHtml(name)}</span><span class="rank-value">${value.quantity}개 · ${won(value.amount)}</span><div class="rank-bar"><span style="width:${value.quantity / maxQty * 100}%"></span></div></div>`).join('') : '<p class="cart-meta">선택한 달의 데이터가 없습니다.</p>';
   els.historyList.innerHTML = data.records.slice().sort((a, b) => b.date.localeCompare(a.date)).map((record) => `<div class="history-row" data-id="${escapeHtml(record.id)}"><time>${record.date.slice(5).replace('-', '.')}</time><span class="history-store">${escapeHtml(record.store || '미지정')}${record.branch ? ` · ${escapeHtml(record.branch)}` : ''}</span><span class="history-items">${escapeHtml(record.items.map((item) => `${item.name} ${item.quantity}개`).join(', '))}</span><strong class="history-total">${won(record.total)}</strong><button class="delete-history" type="button">삭제</button></div>`).join('') || '<p class="cart-meta">선택한 달의 기록이 없습니다.</p>';
+  renderAdvancedAnalysis();
 }
 
 function refreshStoreFilter() {
@@ -1207,6 +1294,15 @@ els.confirmPurchaseSave.addEventListener('click', () => {
 });
 els.dashboardMonth.addEventListener('change', renderDashboard);
 els.dashboardStore.addEventListener('change', renderDashboard);
+els.advisorForm.addEventListener('submit', (event) => {
+  event.preventDefault(); const question=els.advisorInput.value.trim(); if(!question)return;
+  addAdvisorMessage(question,'user'); addAdvisorMessage(answerAdvisor(question),'bot'); els.advisorInput.value='';
+});
+document.querySelector('.advisor-suggestions').addEventListener('click', (event) => {
+  const button=event.target.closest('button'); if(!button)return; addAdvisorMessage(button.textContent,'user'); addAdvisorMessage(answerAdvisor(button.textContent),'bot');
+});
+els.receiptPhotoButton.addEventListener('click', () => els.receiptPhoto.click());
+els.receiptPhoto.addEventListener('change', async () => { const file=els.receiptPhoto.files[0]; if(file)await checkReceipt(file); els.receiptPhoto.value=''; });
 els.historyList.addEventListener('click', (event) => {
   const button = event.target.closest('.delete-history');
   if (!button || !confirm('이 지출 기록을 삭제할까요?')) return;

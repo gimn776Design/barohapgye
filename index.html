@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=24">
+  <link rel="stylesheet" href="styles.css?v=25">
 </head>
 <body>
   <div class="background-world" aria-hidden="true">
@@ -95,6 +95,20 @@
         </div>
         <input id="restoreFile" type="file" accept="application/json,.json" hidden>
       </section>
+      <section class="advisor-card" aria-labelledby="advisorTitle">
+        <div class="advisor-heading"><div><p class="step-label">내 기록 분석 에이전트</p><h3 id="advisorTitle">알뜰이에게 물어보세요</h3></div><span>기기 안에서 분석</span></div>
+        <div id="advisorMessages" class="advisor-messages"><div class="advisor-message bot">저장된 지출 기록을 바탕으로 상품·매장·할인·가격 변화를 분석해드려요.</div></div>
+        <div class="advisor-suggestions">
+          <button type="button">올해 가장 많이 산 물품은?</button><button type="button">자주 이용하는 매장은?</button>
+          <button type="button">올해 평균 할인율은?</button><button type="button">매장별로 자주 산 상품은?</button>
+          <button type="button">가격이 가장 많이 오른 상품은?</button><button type="button">언제 행사를 많이 이용했어?</button>
+        </div>
+        <form id="advisorForm" class="advisor-form"><input id="advisorInput" placeholder="내 소비 기록에 대해 질문하세요" required><button type="submit">분석</button></form>
+      </section>
+      <div class="analysis-grid">
+        <article class="chart-card"><div class="chart-heading"><div><h3>상품 가격 변화</h3><p>매장별 최초·최근·평균 가격</p></div></div><div id="priceTrendList" class="analysis-list"></div></article>
+        <article class="chart-card"><div class="chart-heading"><div><h3>가성비 비교 추천</h3><p>가격과 중량·개수를 함께 비교</p></div></div><div id="valueComparisonList" class="analysis-list"></div></article>
+      </div>
       <div class="kpi-grid">
         <article class="kpi-card"><span>선택 월 지출</span><strong id="monthSpend">0원</strong></article>
         <article class="kpi-card"><span>장보기 횟수</span><strong id="purchaseCount">0회</strong></article>
@@ -164,6 +178,12 @@
           <button id="quantitySubmit" type="submit" disabled>적용</button>
         </div>
       </form>
+      <section class="receipt-check" aria-labelledby="receiptCheckTitle">
+        <div><p class="step-label">결제 후 확인</p><h3 id="receiptCheckTitle">영수증과 장바구니 대조</h3><p>영수증을 촬영하면 누락 상품과 총액 차이를 확인합니다.</p></div>
+        <button id="receiptPhotoButton" type="button">🧾 영수증 촬영·불러오기</button>
+        <input id="receiptPhoto" type="file" accept="image/*" capture="environment" hidden>
+        <div id="receiptCheckResult" class="receipt-check-result" hidden></div>
+      </section>
     </section>
 
     <section class="cart-section">
@@ -292,7 +312,7 @@
 
   <div id="toast" class="toast" role="status"></div>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="app.js?v=24"></script>
+  <script src="app.js?v=25"></script>
 </body>
 </html>
 

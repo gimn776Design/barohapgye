@@ -258,10 +258,23 @@ function parseProductAndPrice(text) {
     }
   }
   priced.sort((a, b) => b.score - a.score || a.value - b.value);
-  const nameCandidates = lines.filter((line) =>
-    /[가-힣A-Za-z]{2}/.test(line) && !/원|할인|행사|판매가|구매가|정상가|바코드|카드|포인트|기간/.test(line) && !/^\d[\d\s.,%-]*$/.test(line)
-  ).sort((a, b) => Math.min(b.length, 45) - Math.min(a.length, 45));
+  const nameCandidates = lines.map((line) => line
+    .replace(/(?:₩|￦)?\s*\d{1,3}(?:,\d{3})+\s*원?/g, ' ')
+    .replace(/\d{3,7}\s*원/g, ' ')
+    .replace(/정상가|판매가|구매가|회원가|행사가|할인가|할인|행사|바코드|카드|포인트|기간/gi, ' ')
+    .replace(/\s+/g, ' ').trim()
+  ).filter((line) => /[가-힣A-Za-z]{2}/.test(line) && !/^\d[\d\s.,%-]*$/.test(line))
+    .sort((a, b) => Math.min(b.length, 45) - Math.min(a.length, 45));
   return { name: (nameCandidates[0] || '').slice(0, 80), price: priced[0]?.value || '', text: lines.join('\n').slice(0, 1500) };
+}
+
+function inferCategory(name) {
+  const text = String(name || '');
+  if (/커피|라떼|음료|주스|콜라|사이다|생수|우유|차\b/i.test(text)) return '음료';
+  if (/세제|휴지|샴푸|비누|치약|물티슈|청소/i.test(text)) return '생활용품';
+  if (/사료|간식.*(?:견|묘)|반려|강아지|고양이/i.test(text)) return '반려동물';
+  if (/화장품|크림|로션|영양제|비타민/i.test(text)) return '건강·미용';
+  return '식품';
 }
 
 function resizeProductPhoto(file) {
@@ -312,6 +325,20 @@ async function recognizeProductPhoto(file) {
   const code = `photo:${key || Date.now()}`;
   const existing = state.catalog[code];
   state.pendingCode = code;
+  if (parsed.name && parsed.price) {
+    state.catalog[code] = {
+      ...(existing || {}),
+      name: parsed.name,
+      price: Number(parsed.price),
+      category: existing?.category || inferCategory(parsed.name),
+      image: state.pendingProductImage
+    };
+    saveCatalog();
+    clearPendingProductPhoto();
+    addToCart(code);
+    els.scanStatus.textContent = `${parsed.name} · ${won(parsed.price)} 자동 등록 완료`;
+    return true;
+  }
   els.dialogCode.textContent = '상품·가격표 사진으로 등록';
   els.productName.value = existing?.name || parsed.name;
   els.productPrice.value = existing?.price ?? parsed.price;
@@ -324,6 +351,7 @@ async function recognizeProductPhoto(file) {
   els.scanStatus.textContent = parsed.name && parsed.price
     ? '상품명과 가격을 자동 입력했습니다. 내용을 확인한 뒤 등록해주세요.'
     : '일부 내용을 읽지 못했습니다. 등록창에서 상품명과 가격을 확인해주세요.';
+  return false;
 }
 
 function cleanPromotion(value) {
@@ -774,8 +802,8 @@ els.productPhoto.addEventListener('change', async () => {
   els.productPhoto.value = '';
   if (!file) return;
   try {
-    await recognizeProductPhoto(file);
-    showToast('상품명과 가격 후보를 자동 입력했어요.');
+    const registered = await recognizeProductPhoto(file);
+    showToast(registered ? '상품명과 금액을 자동 등록했어요.' : '읽지 못한 내용을 확인해주세요.');
   } catch (_) {
     showToast('상품·가격표를 읽지 못했습니다. 다시 촬영해주세요.');
   }

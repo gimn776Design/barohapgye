@@ -45,7 +45,10 @@ h2 { margin-bottom: 0; font-size: 20px; letter-spacing: -.03em; }
 .scan-workflow span { display: flex; align-items: center; gap: 4px; }
 .scan-workflow b { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; color: white; background: #7254ec; }
 .scan-workflow i { color: #a4adbc; font-style: normal; }
+.scan-workflow.single { flex-wrap: wrap; color: #3e4b62; background: linear-gradient(110deg, #f4f1ff, #effcf5); }
 .product-photo-button { width: 100%; min-height: 50px; margin-top: 10px; border: 1px solid #cfd7ef; border-radius: 14px; color: #5638be; background: #f5f1ff; font-weight: 900; }
+.single-scan-button { min-height: 62px; border: 0; color: #fff; background: linear-gradient(115deg, #5d55ed, #9a49e7 55%, #ec5d9f); box-shadow: 0 12px 28px rgba(112,76,222,.28); font-size: 19px; }
+.legacy-scanner { display: none !important; }
 .product-photo-ready { display: flex; align-items: center; gap: 11px; margin-top: 9px; padding: 9px; border: 1px solid #bce6cf; border-radius: 13px; color: #22633f; background: #effbf4; font-size: 12px; font-weight: 850; }
 .product-photo-ready[hidden] { display: none !important; }
 .product-photo-ready img { width: 54px; height: 54px; border-radius: 10px; object-fit: cover; }

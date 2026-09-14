@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=16">
+  <link rel="stylesheet" href="styles.css?v=17">
 </head>
 <body>
   <div class="background-world" aria-hidden="true">
@@ -116,21 +116,22 @@
     <section class="scanner-card">
       <div class="section-heading">
         <div>
-          <p class="step-label">카메라 스캔</p>
-          <h2 id="scannerTitle">상품 바코드를 보여주세요</h2>
+          <p class="step-label">상품 자동 스캔</p>
+          <h2 id="scannerTitle">가격표의 상품명과 금액을 촬영하세요</h2>
         </div>
         <span id="modeBadge" class="badge">상품</span>
       </div>
 
-      <div class="scan-workflow" aria-label="상품 등록 방법">
-        <span><b>A</b> 상품·가격표 한 번에</span><i>또는</i><span><b>B</b> 바코드·QR</span>
+      <div class="scan-workflow single" aria-label="상품 등록 방법">
+        <span><b>1</b> 가격표 촬영</span><i>→</i><span><b>2</b> 글자·금액 인식</span><i>→</i><span><b>3</b> 자동 등록</span>
       </div>
-      <button id="productPhotoButton" class="product-photo-button" type="button">A. 상품·가격표 촬영해서 자동 입력</button>
+      <button id="productPhotoButton" class="product-photo-button single-scan-button" type="button">📷 스캔하기</button>
       <input id="productPhoto" type="file" accept="image/*" capture="environment" hidden>
       <div id="productPhotoReady" class="product-photo-ready" hidden>
-        <img id="productPhotoPreview" alt="촬영한 상품"><span>사진 글자 인식 완료<br><small>자동 입력된 상품명과 가격을 확인하세요.</small></span>
+        <img id="productPhotoPreview" alt="촬영한 가격표"><span>가격표 인식 완료<br><small>상품명과 금액을 장바구니에 등록했습니다.</small></span>
       </div>
 
+      <div class="legacy-scanner" aria-hidden="true">
       <div id="cameraStage" class="camera-stage">
         <video id="video" playsinline muted></video>
         <div class="scan-frame" aria-hidden="true"></div>
@@ -145,10 +146,11 @@
         <button id="switchModeButton" class="secondary-button" type="button">가격 코드 스캔</button>
       </div>
       <button id="captureScanButton" class="capture-scan-button" type="button">B. 바코드·QR 촬영해서 등록</button>
+      </div>
       <button id="promotionPhotoButton" class="promotion-button" type="button">행사표 사진 인식 · 1+1 / 할인 적용</button>
       <input id="promotionPhoto" type="file" accept="image/*" capture="environment" hidden>
       <button id="discountRateButton" class="discount-rate-button" type="button">선택한 상품 할인율 직접 입력</button>
-      <p id="scanStatus" class="status">상품 코드를 먼저 스캔하세요.</p>
+      <p id="scanStatus" class="status">가격표에 상품명과 최종 금액이 함께 보이도록 촬영해주세요.</p>
 
       <form id="quantityForm" class="manual-form">
         <label id="quantityLabel" for="quantityInput">같은 상품 수량 입력</label>
@@ -275,6 +277,6 @@
 
   <div id="toast" class="toast" role="status"></div>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="app.js?v=16"></script>
+  <script src="app.js?v=17"></script>
 </body>
 </html>

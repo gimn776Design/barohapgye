@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=29">
+  <link rel="stylesheet" href="styles.css?v=30">
 </head>
 <body>
   <div class="background-world" aria-hidden="true">
@@ -146,7 +146,7 @@
       </div>
       <div id="scanInsight" class="scan-insight" hidden>
         <div><span>인식 상품</span><strong id="scanInsightName">-</strong></div>
-        <div><span>중량·품목</span><strong id="scanInsightDetail">-</strong></div>
+        <div><span>무게·용량·품목</span><strong id="scanInsightDetail">-</strong></div>
         <div><span>적용 가격</span><strong id="scanInsightPrice">-</strong><small id="scanInsightSource"></small></div>
       </div>
 
@@ -215,7 +215,7 @@
       </div>
       <img id="productDialogPreview" class="product-dialog-preview" alt="등록할 상품 사진" hidden>
       <label>상품명<input id="productName" placeholder="예: 코카콜라 500ml" required></label>
-      <label>중량·용량·구성<input id="productWeight" placeholder="예: 500g, 1.5kg, 1L×4입"></label>
+      <label>무게·용량·구성 수량 <small>(g / kg / ml / L / 개)</small><input id="productWeight" placeholder="예: 500g, 1.5kg, 1L × 4입"></label>
       <label>품목<select id="productCategory"><option>식품</option><option>축산</option><option>수산</option><option>농산</option><option>베이커리</option><option>음료</option><option>카페</option><option>생활용품</option><option>주방용품</option><option>건강·미용</option><option>반려동물</option><option>기타</option></select></label>
       <label>단가 (원)<input id="productPrice" inputmode="numeric" pattern="[0-9,]*" placeholder="예: 2200" required></label>
       <section id="detectedDiscountPanel" class="detected-discount-panel" hidden>
@@ -312,7 +312,7 @@
 
   <div id="toast" class="toast" role="status"></div>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="app.js?v=29"></script>
+  <script src="app.js?v=30"></script>
 </body>
 </html>
 

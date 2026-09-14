@@ -340,15 +340,18 @@ function numericPriceFromText(text) {
 
 function analyzeDiscountOffer(text, fallbackPrice = '') {
   const source = String(text || '').replace(/\s+/g, ' ').trim();
+  const compact = source.replace(/\s+/g, '');
   const values = [...source.matchAll(/(?<!\d)(?:\d{1,3}(?:,\d{3})+|\d{3,7})(?!\d)/g)]
     .map((match) => Number(match[0].replaceAll(',', '')))
     .filter((value) => value >= 100 && value <= 10000000);
-  const hasDiscountLanguage = /할인|행사가|할인가|쿠폰|회원가|특가|세일/i.test(source);
+  const hasDiscountLanguage = /할인|행사가|할인가|쿠폰|회원가|특가|세일|sale|off/i.test(compact);
   const percentMatch = hasDiscountLanguage
-    ? source.match(/(?:할인|행사|쿠폰|회원|특가|세일)[^\d%]{0,12}(\d{1,2}(?:\.\d+)?)\s*%|(\d{1,2}(?:\.\d+)?)\s*%[^가-힣A-Za-z0-9]{0,5}(?:할인|행사|쿠폰|회원|특가|세일)/i)
+    ? compact.match(/(?:할인|행사|쿠폰|회원|특가|세일|sale|off)[^\d%]{0,25}(\d{1,2}(?:\.\d+)?)%|(\d{1,2}(?:\.\d+)?)%[^가-힣A-Za-z0-9]{0,12}(?:할인|행사|쿠폰|회원|특가|세일|sale|off)/i)
     : null;
-  const negativeMatch = source.match(/(?:-|−|–)\s*(\d{1,3}(?:,\d{3})+|\d{3,7})/) || source.match(/할인(?:액)?\s*[:：]?\s*(\d{1,3}(?:,\d{3})+|\d{3,7})\s*원?/);
-  const amount = negativeMatch ? Number(negativeMatch[1].replaceAll(',', '')) : 0;
+  const negativeMatch = compact.match(/(?:-|−|–)(\d{1,3}(?:,\d{3})+|\d{3,7})/) || compact.match(/할인(?:액)?[:：]?(\d{1,3}(?:,\d{3})+|\d{3,7})원?/);
+  const sortedPrices = [...new Set(values.filter(value => value >= 500))].sort((a,b) => b-a);
+  const inferredAmount = hasDiscountLanguage && sortedPrices.length >= 2 && sortedPrices[0] - sortedPrices[1] >= 100 ? sortedPrices[0] - sortedPrices[1] : 0;
+  const amount = negativeMatch ? Number(negativeMatch[1].replaceAll(',', '')) : inferredAmount;
   const type = percentMatch ? 'percent' : (amount && hasDiscountLanguage ? 'amount' : 'none');
   const discountValue = percentMatch ? Number(percentMatch[1] || percentMatch[2]) : (hasDiscountLanguage ? amount : 0);
   let originalPrice = values.length ? Math.max(...values) : Number(fallbackPrice) || 0;
@@ -358,12 +361,12 @@ function analyzeDiscountOffer(text, fallbackPrice = '') {
     : type === 'percent' ? Math.round(originalPrice * (1 - discountValue / 100)) : originalPrice;
   const matchingFinal = values.find((value) => value === computedFinal);
   const conditions = [];
-  if (/신세계\s*포인트|포인트\s*(?:적립|회원|카드)/i.test(source)) conditions.push('포인트 적립/회원 조건');
-  if (/삼성|국민|신한|현대|롯데|농협|우리|하나|비씨|BC/i.test(source) && /카드|결제/i.test(source)) conditions.push('해당 카드 결제 조건');
-  if (/쿠폰|앱\s*전용/i.test(source)) conditions.push('쿠폰 또는 앱 사용 조건');
-  if (/구독권|구독\s*회원/i.test(source)) conditions.push('구독권/구독 회원 조건');
-  if (/회원가|멤버십/i.test(source)) conditions.push('회원/멤버십 조건');
-  if (/일부\s*점포|점포별|지점별|입점\s*점포/i.test(source)) conditions.push('지점별 적용 조건');
+  if (/신세계포인트|포인트(?:적립|회원|카드)/i.test(compact)) conditions.push('포인트 적립/회원 조건');
+  if (/삼성|국민|신한|현대|롯데|농협|우리|하나|비씨|BC/i.test(compact) && /카드|결제/i.test(compact)) conditions.push('해당 카드 결제 조건');
+  if (/쿠폰|앱전용/i.test(compact)) conditions.push('쿠폰 또는 앱 사용 조건');
+  if (/구독권|구독회원/i.test(compact)) conditions.push('구독권/구독 회원 조건');
+  if (/회원가|멤버십/i.test(compact)) conditions.push('회원/멤버십 조건');
+  if (/일부점포|점포별|지점별|입점점포/i.test(compact)) conditions.push('지점별 적용 조건');
   return {
     type,
     value: discountValue,
@@ -380,6 +383,12 @@ function updateDetectedDiscountPreview() {
   const price = Number(els.productPrice.value.replaceAll(',', '')) || 0;
   const finalPrice = type === 'amount' ? Math.max(0, price - value) : type === 'percent' ? Math.round(price * (1 - value / 100)) : price;
   els.detectedFinalPrice.textContent = price ? won(finalPrice) : '-';
+}
+
+function syncDiscountAutoApply() {
+  const condition=els.detectedDiscountCondition.value.trim();
+  const conditional=Boolean(condition)&&condition!=='별도 조건 문구 없음';
+  if(els.detectedDiscountType.value!=='none'&&Number(els.detectedDiscountValue.value)>0&&!conditional) els.applyDetectedDiscount.checked=true;
 }
 
 function showDetectedDiscount(offer) {
@@ -765,7 +774,7 @@ function exportMonthlyCsv() {
   const store = els.dashboardStore.value;
   const records = state.purchases.filter((record) => record.date.startsWith(month) && (store === 'all' || (record.store || '미지정') === store));
   if (!records.length) return showToast('선택한 달의 내보낼 기록이 없습니다.');
-  const rows = [['이용 날짜', '매장', '지점', '상품명', '중량·용량', '품목', '단가(원)', '수량', '행사', '최종 금액(원)']];
+  const rows = [['이용 날짜', '매장', '지점', '상품명', '무게·용량·구성', '품목', '단가(원)', '수량', '행사', '최종 금액(원)']];
   for (const record of records) for (const item of record.items) rows.push([record.date, record.store || '미지정', record.branch || '', item.name, item.weight || '', item.category || '미분류', item.price, item.quantity, promotionLabel(item.promotion) || '없음', item.total]);
   const csv = '\ufeff' + rows.map((row) => row.map(csvCell).join(',')).join('\r\n');
   downloadFile(csv, `barohapgye-expenses-${month}.csv`, 'text/csv;charset=utf-8');
@@ -980,7 +989,7 @@ function renderAdvancedAnalysis() {
   const trends=buildPriceTrends().sort((a,b)=>Math.abs(b.changeRate)-Math.abs(a.changeRate));
   els.priceTrendList.innerHTML=trends.length?trends.slice(0,8).map(t=>`<div class="analysis-row"><strong>${escapeHtml(t.name)}</strong><span>${escapeHtml(t.store)} · 평균 ${won(Math.round(t.average))}</span><small>${won(t.first)} → ${won(t.latest)} · ${Math.abs(t.changeRate).toFixed(1)}% ${t.changeRate>=0?'인상':'인하'}</small></div>`).join(''):'<p class="cart-meta">같은 상품의 구매 기록이 2회 이상 쌓이면 표시됩니다.</p>';
   const comparisons=buildValueComparisons();
-  els.valueComparisonList.innerHTML=comparisons.length?comparisons.slice(0,6).map(group=>{const best=group.items[0];return `<div class="analysis-row best"><strong>${escapeHtml(group.kind)} 추천: ${escapeHtml(best.name)}</strong><span>${escapeHtml(best.store)} · ${best.unitLabel}당 ${won(Math.round(best.unitPrice))}</span><small>${group.items.slice(0,3).map(i=>`${escapeHtml(i.name)} ${won(Math.round(i.unitPrice))}`).join(' / ')}</small></div>`;}).join(''):'<p class="cart-meta">같은 종류의 상품에 중량·용량을 입력하면 단위가격을 비교합니다.</p>';
+  els.valueComparisonList.innerHTML=comparisons.length?comparisons.slice(0,6).map(group=>{const best=group.items[0];return `<div class="analysis-row best"><strong>${escapeHtml(group.kind)} 추천: ${escapeHtml(best.name)}</strong><span>${escapeHtml(best.store)} · ${best.unitLabel}당 ${won(Math.round(best.unitPrice))}</span><small>${group.items.slice(0,3).map(i=>`${escapeHtml(i.name)} ${won(Math.round(i.unitPrice))}`).join(' / ')}</small></div>`;}).join(''):'<p class="cart-meta">같은 종류의 상품에 무게·용량(g/kg/ml/L) 또는 개수를 입력하면 단위가격을 비교합니다.</p>';
 }
 
 function receiptPriceCandidates(text) {
@@ -1246,8 +1255,8 @@ els.quantityForm.addEventListener('submit', (event) => {
 });
 els.productPrice.addEventListener('input', () => { els.productPrice.value = els.productPrice.value.replace(/[^0-9]/g, ''); });
 els.productPrice.addEventListener('input', updateDetectedDiscountPreview);
-els.detectedDiscountType.addEventListener('change', updateDetectedDiscountPreview);
-els.detectedDiscountValue.addEventListener('input', updateDetectedDiscountPreview);
+els.detectedDiscountType.addEventListener('change', () => { updateDetectedDiscountPreview(); syncDiscountAutoApply(); });
+els.detectedDiscountValue.addEventListener('input', () => { updateDetectedDiscountPreview(); syncDiscountAutoApply(); });
 els.detectedDiscountCondition.addEventListener('input', () => {
   const conditional = Boolean(els.detectedDiscountCondition.value.trim()) && els.detectedDiscountCondition.value.trim() !== '별도 조건 문구 없음';
   els.discountRequirementBadge.textContent = conditional ? '조건부 할인' : '조건 없는 할인';

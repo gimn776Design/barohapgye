@@ -497,12 +497,18 @@ async function getProductOcrWorker() {
   return state.ocrWorkerPromise;
 }
 
-function cropTitleCanvas(source) {
+function cropPriceLabelCanvas(source) {
+  const cropX = Math.round(source.width * .15);
+  const cropY = Math.round(source.height * .08);
+  const cropWidth = Math.round(source.width * .7);
+  const cropHeight = Math.round(source.height * .66);
+  const scale = Math.min(3, Math.max(1.6, 2400 / Math.max(cropWidth, cropHeight)));
   const canvas = document.createElement('canvas');
-  canvas.width = source.width;
-  canvas.height = Math.max(1, Math.round(source.height * .58));
+  canvas.width = Math.max(1, Math.round(cropWidth * scale));
+  canvas.height = Math.max(1, Math.round(cropHeight * scale));
   const ctx = canvas.getContext('2d', { alpha: false });
-  ctx.drawImage(source, 0, 0, source.width, canvas.height, 0, 0, canvas.width, canvas.height);
+  ctx.filter = 'grayscale(1) contrast(1.75)';
+  ctx.drawImage(source, cropX, cropY, cropWidth, cropHeight, 0, 0, canvas.width, canvas.height);
   return canvas;
 }
 
@@ -510,7 +516,7 @@ async function recognizeTitleRegion(worker, canvas) {
   try {
     els.scanStatus.textContent = '가격표의 상품명을 집중해서 읽는 중입니다…';
     await worker.setParameters({ tessedit_pageseg_mode: '6', tessedit_char_whitelist: '', preserve_interword_spaces: '1' });
-    const result = await worker.recognize(cropTitleCanvas(canvas));
+    const result = await worker.recognize(canvas);
     return result.data.text || '';
   } finally {
     await worker.setParameters({ tessedit_pageseg_mode: '11', preserve_interword_spaces: '1' }).catch(() => {});
@@ -559,9 +565,11 @@ async function recognizeProductPhoto(file) {
       lowDetail = prepared.lowDetail;
       const worker = await getProductOcrWorker();
       const result = await worker.recognize(prepared.canvas);
-      const titleText = await recognizeTitleRegion(worker, prepared.canvas);
+      const focusedLabel = cropPriceLabelCanvas(prepared.canvas);
+      const titleText = await recognizeTitleRegion(worker, focusedLabel);
       parsed = parseProductAndPrice(`${titleText}\n${result.data.text}`);
-      if (!parsed.price) parsed.price = await recognizePriceNumbers(worker, prepared.canvas);
+      const verifiedPrice = await recognizePriceNumbers(worker, focusedLabel);
+      if (verifiedPrice && (!parsed.price || verifiedPrice > parsed.price * 1.5 || (parsed.price % 10 !== 0 && verifiedPrice % 10 === 0))) parsed.price = verifiedPrice;
     } catch (_) {
       parsed.text = '사진 글자 인식에 실패했습니다. 상품명과 가격을 직접 확인해주세요.';
     }

@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=14">
+  <link rel="stylesheet" href="styles.css?v=15">
 </head>
 <body>
   <div class="background-world" aria-hidden="true">
@@ -64,6 +64,15 @@
         <label for="purchaseDate">이용 날짜</label>
         <input id="purchaseDate" type="date">
       </div>
+      <div class="purchase-store-row">
+        <label for="purchaseStore">이용 매장</label>
+        <select id="purchaseStore">
+          <option>트레이더스</option><option>이마트</option><option>홈플러스</option><option>롯데마트</option><option>코스트코</option>
+          <option>GS25</option><option>CU</option><option>세븐일레븐</option><option>이마트24</option><option>미니스톱</option>
+          <option>스타벅스</option><option>투썸플레이스</option><option>메가커피</option><option>컴포즈커피</option><option>카페</option><option>기타</option>
+        </select>
+        <input id="purchaseBranch" type="text" maxlength="40" placeholder="지점명(선택)">
+      </div>
       <button id="savePurchaseButton" class="save-purchase-button" type="button">지출 기록 저장</button>
     </section>
 
@@ -73,7 +82,10 @@
     <section id="dashboardView" class="dashboard-view" hidden>
       <div class="dashboard-header">
         <div><p class="step-label">소비 리포트</p><h2>지출 한눈에 보기</h2></div>
-        <label class="month-filter">조회 월<input id="dashboardMonth" type="month"></label>
+        <div class="dashboard-filters">
+          <label class="month-filter">조회 월<input id="dashboardMonth" type="month"></label>
+          <label class="month-filter">매장별 보기<select id="dashboardStore"><option value="all">전체 매장</option></select></label>
+        </div>
       </div>
       <section class="data-tools" aria-labelledby="dataToolsTitle">
         <div><h3 id="dataToolsTitle">백업 및 내보내기</h3><p id="backupStatus">이 기기에만 저장 중</p></div>
@@ -89,6 +101,7 @@
         <article class="kpi-card"><span>장보기 횟수</span><strong id="purchaseCount">0회</strong></article>
         <article class="kpi-card"><span>구매 수량</span><strong id="monthItemCount">0개</strong></article>
         <article class="kpi-card"><span>가장 많이 산 상품</span><strong id="topProduct">-</strong></article>
+        <article class="kpi-card"><span>조회 중인 매장</span><strong id="selectedStoreKpi">전체</strong></article>
       </div>
       <div id="dashboardEmpty" class="dashboard-empty"><strong>선택한 달의 지출 기록이 없습니다.</strong><p>장보기 계산 화면에서 날짜를 정하고 기록을 저장해주세요.</p></div>
       <div id="dashboardContent">
@@ -110,13 +123,13 @@
         <span id="modeBadge" class="badge">상품</span>
       </div>
 
-      <div class="scan-workflow" aria-label="상품 등록 순서">
-        <span><b>1</b> 상품 사진</span><i>→</i><span><b>2</b> 바코드·QR</span><i>→</i><span><b>3</b> 가격·행사</span>
+      <div class="scan-workflow" aria-label="상품 등록 방법">
+        <span><b>A</b> 상품·가격표 한 번에</span><i>또는</i><span><b>B</b> 바코드·QR</span>
       </div>
-      <button id="productPhotoButton" class="product-photo-button" type="button">1. 상품 사진 찍기</button>
+      <button id="productPhotoButton" class="product-photo-button" type="button">A. 상품·가격표 촬영해서 자동 입력</button>
       <input id="productPhoto" type="file" accept="image/*" capture="environment" hidden>
       <div id="productPhotoReady" class="product-photo-ready" hidden>
-        <img id="productPhotoPreview" alt="촬영한 상품"><span>상품 사진 준비 완료<br><small>이제 아래에서 코드를 촬영하세요.</small></span>
+        <img id="productPhotoPreview" alt="촬영한 상품"><span>사진 글자 인식 완료<br><small>자동 입력된 상품명과 가격을 확인하세요.</small></span>
       </div>
 
       <div id="cameraStage" class="camera-stage">
@@ -132,7 +145,7 @@
         <button id="cameraButton" class="primary-button" type="button">카메라 켜기</button>
         <button id="switchModeButton" class="secondary-button" type="button">가격 코드 스캔</button>
       </div>
-      <button id="captureScanButton" class="capture-scan-button" type="button">2. 바코드·QR 촬영해서 인식</button>
+      <button id="captureScanButton" class="capture-scan-button" type="button">B. 바코드·QR 촬영해서 등록</button>
       <button id="promotionPhotoButton" class="promotion-button" type="button">행사표 사진 인식 · 1+1 / 할인 적용</button>
       <input id="promotionPhoto" type="file" accept="image/*" capture="environment" hidden>
       <button id="discountRateButton" class="discount-rate-button" type="button">선택한 상품 할인율 직접 입력</button>
@@ -171,6 +184,7 @@
         <p id="dialogCode" class="code-label"></p>
       </div>
       <img id="productDialogPreview" class="product-dialog-preview" alt="등록할 상품 사진" hidden>
+      <label id="productOcrLabel" hidden>사진에서 읽은 내용<textarea id="productOcrText" rows="3" readonly></textarea></label>
       <label>상품명<input id="productName" placeholder="예: 코카콜라 500ml" required></label>
       <label>품목<select id="productCategory"><option>식품</option><option>음료</option><option>생활용품</option><option>주방용품</option><option>건강·미용</option><option>반려동물</option><option>기타</option></select></label>
       <label>단가 (원)<input id="productPrice" inputmode="numeric" pattern="[0-9,]*" placeholder="예: 2200" required></label>
@@ -240,6 +254,6 @@
 
   <div id="toast" class="toast" role="status"></div>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="app.js?v=14"></script>
+  <script src="app.js?v=15"></script>
 </body>
 </html>

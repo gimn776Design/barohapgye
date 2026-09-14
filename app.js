@@ -5,7 +5,7 @@ const state = { mode: 'product', pendingCode: null, pendingProductImage: null, p
 const $ = (id) => document.getElementById(id);
 const els = {
   video: $('video'), cameraStage: $('cameraStage'), cameraPlaceholder: $('cameraPlaceholder'), cameraButton: $('cameraButton'), captureScanButton: $('captureScanButton'),
-  productPhotoButton: $('productPhotoButton'), productPhoto: $('productPhoto'), productPhotoReady: $('productPhotoReady'), productPhotoPreview: $('productPhotoPreview'), productDialogPreview: $('productDialogPreview'),
+  productPhotoButton: $('productPhotoButton'), productPhoto: $('productPhoto'), productPhotoReady: $('productPhotoReady'), productPhotoPreview: $('productPhotoPreview'), productDialogPreview: $('productDialogPreview'), productOcrLabel: $('productOcrLabel'), productOcrText: $('productOcrText'),
   switchModeButton: $('switchModeButton'), modeBadge: $('modeBadge'), scannerTitle: $('scannerTitle'), scanStatus: $('scanStatus'),
   quantityForm: $('quantityForm'), quantityInput: $('quantityInput'), quantityLabel: $('quantityLabel'), quantitySubmit: $('quantitySubmit'), cartList: $('cartList'), emptyState: $('emptyState'),
   grandTotal: $('grandTotal'), totalCount: $('totalCount'), resetButton: $('resetButton'), dialog: $('productDialog'),
@@ -16,8 +16,8 @@ const els = {
   promotionText: $('promotionText'), promotionType: $('promotionType'), promotionFields: $('promotionFields'), cancelPromotion: $('cancelPromotion'),
   eventStore: $('eventStore'), eventBranch: $('eventBranch'), eventWebSearch: $('eventWebSearch'), officialEventSearch: $('officialEventSearch'), eventExplanation: $('eventExplanation'),
   installButton: $('installButton'), calculatorView: $('calculatorView'), dashboardView: $('dashboardView'),
-  purchaseDate: $('purchaseDate'), savePurchaseButton: $('savePurchaseButton'), dashboardMonth: $('dashboardMonth'),
-  monthSpend: $('monthSpend'), purchaseCount: $('purchaseCount'), monthItemCount: $('monthItemCount'), topProduct: $('topProduct'),
+  purchaseDate: $('purchaseDate'), purchaseStore: $('purchaseStore'), purchaseBranch: $('purchaseBranch'), savePurchaseButton: $('savePurchaseButton'), dashboardMonth: $('dashboardMonth'), dashboardStore: $('dashboardStore'),
+  monthSpend: $('monthSpend'), purchaseCount: $('purchaseCount'), monthItemCount: $('monthItemCount'), topProduct: $('topProduct'), selectedStoreKpi: $('selectedStoreKpi'),
   dashboardEmpty: $('dashboardEmpty'), dashboardContent: $('dashboardContent'), monthlyChart: $('monthlyChart'),
   categoryChart: $('categoryChart'), categoryLegend: $('categoryLegend'), productRanking: $('productRanking'), historyList: $('historyList'),
   backupButton: $('backupButton'), restoreButton: $('restoreButton'), csvButton: $('csvButton'), restoreFile: $('restoreFile'),
@@ -38,9 +38,9 @@ function setMode(mode) {
   const priceMode = mode === 'price';
   els.modeBadge.textContent = priceMode ? '가격' : '상품';
   els.modeBadge.classList.toggle('price', priceMode);
-  els.scannerTitle.textContent = priceMode ? '가격 QR/바코드를 보여주세요' : '상품 바코드를 보여주세요';
+  els.scannerTitle.textContent = priceMode ? '가격 QR/바코드를 보여주세요' : '상품·가격표 또는 바코드를 촬영하세요';
   els.switchModeButton.textContent = priceMode ? '상품 코드 스캔' : '가격 코드 스캔';
-  els.scanStatus.textContent = priceMode ? '가격만 인식하면 직전 상품에 적용합니다.' : '상품 코드를 스캔하면 수량이 추가됩니다.';
+  els.scanStatus.textContent = priceMode ? '가격만 인식하면 직전 상품에 적용합니다.' : '사진 한 장으로 상품명·가격을 입력하거나 바코드로 등록할 수 있습니다.';
 }
 
 function showToast(message) {
@@ -67,6 +67,8 @@ function addToCart(code) {
     els.dialogCode.textContent = `상품 코드: ${code}`;
     els.productName.value = '';
     els.productPrice.value = '';
+    els.productOcrText.value = '';
+    els.productOcrLabel.hidden = true;
     els.productDialogPreview.hidden = !state.pendingProductImage;
     if (state.pendingProductImage) els.productDialogPreview.src = state.pendingProductImage;
     els.dialog.showModal();
@@ -244,6 +246,22 @@ function cleanProduct(value) {
   return { name: value.name.slice(0, 200), price, category: typeof value.category === 'string' ? value.category.slice(0, 80) : '미분류', ...(image ? { image } : {}) };
 }
 
+function parseProductAndPrice(text) {
+  const lines = String(text || '').split(/\r?\n/).map((line) => line.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  const priced = [];
+  for (const line of lines) {
+    for (const match of line.matchAll(/(?:₩|￦)\s*(\d{1,3}(?:,\d{3})+|\d{3,7})|(\d{1,3}(?:,\d{3})+|\d{3,7})\s*원|(\d{1,3}(?:,\d{3})+)/g)) {
+      const value = Number((match[1] || match[2] || match[3]).replaceAll(',', ''));
+      if (value >= 100 && value <= 10000000) priced.push({ value, line, score: /행사|할인|판매|회원|최종|구매가/.test(line) ? 2 : 1 });
+    }
+  }
+  priced.sort((a, b) => b.score - a.score || a.value - b.value);
+  const nameCandidates = lines.filter((line) =>
+    /[가-힣A-Za-z]{2}/.test(line) && !/원|할인|행사|판매가|구매가|정상가|바코드|카드|포인트|기간/.test(line) && !/^\d[\d\s.,%-]*$/.test(line)
+  ).sort((a, b) => Math.min(b.length, 45) - Math.min(a.length, 45));
+  return { name: (nameCandidates[0] || '').slice(0, 80), price: priced[0]?.value || '', text: lines.join('\n').slice(0, 1500) };
+}
+
 function resizeProductPhoto(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -270,6 +288,40 @@ function clearPendingProductPhoto() {
   state.pendingProductImage = null;
   els.productPhotoReady.hidden = true;
   els.productPhotoPreview.removeAttribute('src');
+}
+
+async function recognizeProductPhoto(file) {
+  state.pendingProductImage = await resizeProductPhoto(file);
+  els.productPhotoPreview.src = state.pendingProductImage;
+  els.productPhotoReady.hidden = false;
+  let parsed = { name: '', price: '', text: '' };
+  if (window.Tesseract) {
+    try {
+      els.scanStatus.textContent = '상품명과 가격을 읽는 중입니다…';
+      const result = await Tesseract.recognize(file, 'kor+eng', { logger: ({ status, progress }) => {
+        if (status === 'recognizing text') els.scanStatus.textContent = `상품·가격 인식 중 ${Math.round(progress * 100)}%`;
+      }});
+      parsed = parseProductAndPrice(result.data.text);
+    } catch (_) {
+      parsed.text = '사진 글자 인식에 실패했습니다. 상품명과 가격을 직접 확인해주세요.';
+    }
+  }
+  const key = parsed.name.toLowerCase().replace(/[^가-힣a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 70);
+  const code = `photo:${key || Date.now()}`;
+  const existing = state.catalog[code];
+  state.pendingCode = code;
+  els.dialogCode.textContent = '상품·가격표 사진으로 등록';
+  els.productName.value = existing?.name || parsed.name;
+  els.productPrice.value = existing?.price ?? parsed.price;
+  if (existing?.category) els.productCategory.value = existing.category;
+  els.productDialogPreview.src = state.pendingProductImage;
+  els.productDialogPreview.hidden = false;
+  els.productOcrText.value = parsed.text || '사진에서 글자를 찾지 못했습니다.';
+  els.productOcrLabel.hidden = false;
+  els.dialog.showModal();
+  els.scanStatus.textContent = parsed.name && parsed.price
+    ? '상품명과 가격을 자동 입력했습니다. 내용을 확인한 뒤 등록해주세요.'
+    : '일부 내용을 읽지 못했습니다. 등록창에서 상품명과 가격을 확인해주세요.';
 }
 
 function cleanPromotion(value) {
@@ -299,7 +351,7 @@ function validateBackup(raw) {
       return { ...product, code: String(item.code || '').slice(0, 200), quantity, promotion: cleanPromotion(item.promotion), total };
     }).filter(Boolean);
     if (!items.length) return null;
-    return { id: String(record.id || `restored-${recordIndex}-${record.date}`).slice(0, 200), date: record.date, items, total: items.reduce((sum, item) => sum + item.total, 0) };
+    return { id: String(record.id || `restored-${recordIndex}-${record.date}`).slice(0, 200), date: record.date, store: String(record.store || '미지정').slice(0, 60), branch: String(record.branch || '').slice(0, 60), items, total: items.reduce((sum, item) => sum + item.total, 0) };
   }).filter(Boolean);
   const cart = {};
   if (raw.cart && typeof raw.cart === 'object') for (const [code, item] of Object.entries(raw.cart)) {
@@ -334,6 +386,7 @@ function applyRestore(mode) {
     }
   }
   saveCatalog(); savePurchases(); saveCart();
+  refreshStoreFilter();
   state.pendingBackup = null;
   state.pendingCode = null;
   resetQuantityControl();
@@ -349,10 +402,11 @@ function csvCell(value) {
 
 function exportMonthlyCsv() {
   const month = els.dashboardMonth.value;
-  const records = state.purchases.filter((record) => record.date.startsWith(month));
+  const store = els.dashboardStore.value;
+  const records = state.purchases.filter((record) => record.date.startsWith(month) && (store === 'all' || (record.store || '미지정') === store));
   if (!records.length) return showToast('선택한 달의 내보낼 기록이 없습니다.');
-  const rows = [['이용 날짜', '상품명', '품목', '단가(원)', '수량', '행사', '최종 금액(원)']];
-  for (const record of records) for (const item of record.items) rows.push([record.date, item.name, item.category || '미분류', item.price, item.quantity, promotionLabel(item.promotion) || '없음', item.total]);
+  const rows = [['이용 날짜', '매장', '지점', '상품명', '품목', '단가(원)', '수량', '행사', '최종 금액(원)']];
+  for (const record of records) for (const item of record.items) rows.push([record.date, record.store || '미지정', record.branch || '', item.name, item.category || '미분류', item.price, item.quantity, promotionLabel(item.promotion) || '없음', item.total]);
   const csv = '\ufeff' + rows.map((row) => row.map(csvCell).join(',')).join('\r\n');
   downloadFile(csv, `barohapgye-expenses-${month}.csv`, 'text/csv;charset=utf-8');
   showToast(`${month} 지출 내역을 내보냈습니다.`);
@@ -367,14 +421,18 @@ function saveCurrentPurchase() {
   const items = Object.values(state.cart);
   if (!items.length) return showToast('저장할 상품이 없습니다.');
   if (!els.purchaseDate.value) return showToast('이용 날짜를 선택해주세요.');
+  if (!els.purchaseStore.value) return showToast('이용 매장을 선택해주세요.');
   const record = {
     id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
     date: els.purchaseDate.value,
+    store: els.purchaseStore.value,
+    branch: els.purchaseBranch.value.trim(),
     total: items.reduce((sum, item) => sum + promotionTotal(item), 0),
     items: items.map((item) => ({ code: item.code, name: item.name, category: item.category || '미분류', price: item.price, quantity: item.quantity, promotion: item.promotion || null, total: promotionTotal(item) }))
   };
   state.purchases.push(record);
   savePurchases();
+  refreshStoreFilter();
   state.cart = {};
   state.pendingCode = null;
   resetQuantityControl();
@@ -399,8 +457,8 @@ function showView(view) {
   if (dashboard) requestAnimationFrame(renderDashboard);
 }
 
-function aggregateMonth(month) {
-  const records = state.purchases.filter((record) => record.date.startsWith(month));
+function aggregateMonth(month, store = 'all') {
+  const records = state.purchases.filter((record) => record.date.startsWith(month) && (store === 'all' || (record.store || '미지정') === store));
   const products = {};
   const categories = {};
   for (const record of records) for (const item of record.items) {
@@ -432,9 +490,9 @@ function canvasContext(canvas, height) {
   return { ctx, width, height };
 }
 
-function drawMonthlyChart(month) {
+function drawMonthlyChart(month, store = 'all') {
   const months = monthSequence(month);
-  const values = months.map((key) => aggregateMonth(key).total);
+  const values = months.map((key) => aggregateMonth(key, store).total);
   const { ctx, width, height } = canvasContext(els.monthlyChart, 230);
   const pad = { top: 18, right: 10, bottom: 38, left: 48 };
   const chartH = height - pad.top - pad.bottom;
@@ -473,21 +531,30 @@ function drawCategoryChart(categories) {
 
 function renderDashboard() {
   const month = els.dashboardMonth.value || localDate().slice(0, 7);
-  const data = aggregateMonth(month);
+  const store = els.dashboardStore.value || 'all';
+  const data = aggregateMonth(month, store);
   const ranking = Object.entries(data.products).sort((a, b) => b[1].quantity - a[1].quantity);
   els.monthSpend.textContent = won(data.total);
   els.purchaseCount.textContent = `${data.records.length}회`;
   els.monthItemCount.textContent = `${data.itemCount.toLocaleString('ko-KR')}개`;
   els.topProduct.textContent = ranking[0]?.[0] || '-';
+  els.selectedStoreKpi.textContent = store === 'all' ? '전체' : store;
   els.dashboardEmpty.hidden = data.records.length > 0;
   els.dashboardContent.hidden = state.purchases.length === 0;
   if (!state.purchases.length) return;
-  drawMonthlyChart(month);
+  drawMonthlyChart(month, store);
   if (Object.keys(data.categories).length) drawCategoryChart(data.categories);
   else { const { ctx, width, height } = canvasContext(els.categoryChart, 240); ctx.fillStyle = '#8490a3'; ctx.textAlign = 'center'; ctx.fillText('선택한 달의 데이터가 없습니다.', width / 2, height / 2); els.categoryLegend.innerHTML = ''; }
   const maxQty = ranking[0]?.[1].quantity || 1;
   els.productRanking.innerHTML = ranking.length ? ranking.slice(0, 5).map(([name, value], index) => `<div class="rank-row"><span class="rank-number">${index + 1}</span><span class="rank-name">${escapeHtml(name)}</span><span class="rank-value">${value.quantity}개 · ${won(value.amount)}</span><div class="rank-bar"><span style="width:${value.quantity / maxQty * 100}%"></span></div></div>`).join('') : '<p class="cart-meta">선택한 달의 데이터가 없습니다.</p>';
-  els.historyList.innerHTML = data.records.slice().sort((a, b) => b.date.localeCompare(a.date)).map((record) => `<div class="history-row" data-id="${escapeHtml(record.id)}"><time>${record.date.slice(5).replace('-', '.')}</time><span class="history-items">${escapeHtml(record.items.map((item) => `${item.name} ${item.quantity}개`).join(', '))}</span><strong class="history-total">${won(record.total)}</strong><button class="delete-history" type="button">삭제</button></div>`).join('') || '<p class="cart-meta">선택한 달의 기록이 없습니다.</p>';
+  els.historyList.innerHTML = data.records.slice().sort((a, b) => b.date.localeCompare(a.date)).map((record) => `<div class="history-row" data-id="${escapeHtml(record.id)}"><time>${record.date.slice(5).replace('-', '.')}</time><span class="history-store">${escapeHtml(record.store || '미지정')}${record.branch ? ` · ${escapeHtml(record.branch)}` : ''}</span><span class="history-items">${escapeHtml(record.items.map((item) => `${item.name} ${item.quantity}개`).join(', '))}</span><strong class="history-total">${won(record.total)}</strong><button class="delete-history" type="button">삭제</button></div>`).join('') || '<p class="cart-meta">선택한 달의 기록이 없습니다.</p>';
+}
+
+function refreshStoreFilter() {
+  const selected = els.dashboardStore.value || 'all';
+  const stores = [...new Set(state.purchases.map((record) => record.store || '미지정'))].sort((a, b) => a.localeCompare(b, 'ko'));
+  els.dashboardStore.innerHTML = '<option value="all">전체 매장</option>' + stores.map((store) => `<option value="${escapeHtml(store)}">${escapeHtml(store)}</option>`).join('');
+  els.dashboardStore.value = stores.includes(selected) ? selected : 'all';
 }
 
 function escapeHtml(value) {
@@ -689,13 +756,10 @@ els.productPhoto.addEventListener('change', async () => {
   els.productPhoto.value = '';
   if (!file) return;
   try {
-    state.pendingProductImage = await resizeProductPhoto(file);
-    els.productPhotoPreview.src = state.pendingProductImage;
-    els.productPhotoReady.hidden = false;
-    els.scanStatus.textContent = '상품 사진을 준비했습니다. 이제 바코드나 QR을 카메라에 맞추고 2단계 버튼을 누르세요.';
-    showToast('상품 사진이 준비됐어요. 이제 코드를 촬영하세요.');
+    await recognizeProductPhoto(file);
+    showToast('상품명과 가격 후보를 자동 입력했어요.');
   } catch (_) {
-    showToast('상품 사진을 불러오지 못했습니다. 다시 촬영해주세요.');
+    showToast('상품·가격표를 읽지 못했습니다. 다시 촬영해주세요.');
   }
 });
 els.switchModeButton.addEventListener('click', () => setMode(state.mode === 'product' ? 'price' : 'product'));
@@ -797,12 +861,14 @@ els.resetButton.addEventListener('click', () => {
 document.querySelectorAll('.view-tabs button').forEach((button) => button.addEventListener('click', () => showView(button.dataset.view)));
 els.savePurchaseButton.addEventListener('click', saveCurrentPurchase);
 els.dashboardMonth.addEventListener('change', renderDashboard);
+els.dashboardStore.addEventListener('change', renderDashboard);
 els.historyList.addEventListener('click', (event) => {
   const button = event.target.closest('.delete-history');
   if (!button || !confirm('이 지출 기록을 삭제할까요?')) return;
   const id = button.closest('.history-row').dataset.id;
   state.purchases = state.purchases.filter((record) => record.id !== id);
   savePurchases();
+  refreshStoreFilter();
   renderDashboard();
 });
 els.backupButton.addEventListener('click', exportBackup);
@@ -861,5 +927,6 @@ setMode('product');
 els.purchaseDate.value = localDate();
 els.dashboardMonth.value = localDate().slice(0, 7);
 state.cart = JSON.parse(localStorage.getItem('quickSumCart') || '{}');
+refreshStoreFilter();
 updateBackupStatus();
 render();

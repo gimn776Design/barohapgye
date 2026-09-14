@@ -25,7 +25,7 @@ const els = {
   backupButton: $('backupButton'), restoreButton: $('restoreButton'), csvButton: $('csvButton'), restoreFile: $('restoreFile'),
   restoreDialog: $('restoreDialog'), restoreForm: $('restoreForm'), restoreSummary: $('restoreSummary'), cancelRestore: $('cancelRestore'), backupStatus: $('backupStatus'),
   checkoutDialog: $('checkoutDialog'), checkoutMeta: $('checkoutMeta'), checkoutItems: $('checkoutItems'), checkoutGrandTotal: $('checkoutGrandTotal'), cancelCheckout: $('cancelCheckout'), confirmPurchaseSave: $('confirmPurchaseSave'),
-  advisorForm: $('advisorForm'), advisorInput: $('advisorInput'), advisorMessages: $('advisorMessages'), priceTrendList: $('priceTrendList'), valueComparisonList: $('valueComparisonList'),
+  advisorForm: $('advisorForm'), advisorInput: $('advisorInput'), advisorMessages: $('advisorMessages'), priceTrendList: $('priceTrendList'), valueComparisonList: $('valueComparisonList'), personalRecommendationList: $('personalRecommendationList'), storeInsightList: $('storeInsightList'), dashboardEventSearch: $('dashboardEventSearch'),
   receiptPhotoButton: $('receiptPhotoButton'), receiptPhoto: $('receiptPhoto'), receiptCheckResult: $('receiptCheckResult')
 };
 
@@ -954,11 +954,20 @@ function answerAdvisor(question) {
   if(matchingProducts.length){const names=new Set(matchingProducts.map(([name])=>name));const found=items.filter(item=>names.has(item.name)).sort((a,b)=>b.date.localeCompare(a.date));const prices=found.map(i=>Number(i.price));const quantity=found.reduce((sum,i)=>sum+i.quantity,0);const amount=found.reduce((sum,i)=>sum+i.total,0);const latest=found[0];return `‘${latest.name}’은 ${year}년에 ${quantity}개, 총 ${won(amount)} 구매했어요. 최근 단가는 ${won(latest.price)}(${latest.store}, ${latest.date})이고 기록된 단가는 최저 ${won(Math.min(...prices))}, 최고 ${won(Math.max(...prices))}, 평균 ${won(Math.round(prices.reduce((a,b)=>a+b,0)/prices.length))}이에요.`;}
   if (/인상|인하|가격.*변|올랐|내렸/.test(q)) { const trends=buildPriceTrends(); if(!trends.length) return '같은 상품을 두 번 이상 구매한 기록이 있어야 가격 변화를 계산할 수 있어요.'; const t=trends.sort((a,b)=>Math.abs(b.changeRate)-Math.abs(a.changeRate))[0]; return `${t.store}의 ‘${t.name}’ 가격은 최초 ${won(t.first)}에서 최근 ${won(t.latest)}으로 ${Math.abs(t.changeRate).toFixed(1)}% ${t.changeRate>=0?'인상':'인하'}됐어요.`; }
   if (/전체|총.*지출|얼마.*썼|소비.*요약/.test(q)) return `${year}년에는 ${records.length}번 장을 봤고 ${items.reduce((n,i)=>n+i.quantity,0)}개 상품에 총 ${won(records.reduce((s,r)=>s+r.total,0))}을 사용했어요.`;
+  if (/추천|뭘.*살|다음.*구매|절약.*방법/.test(q)) { const recommendations=buildPersonalRecommendations(); return recommendations.length?recommendations.slice(0,3).map(item=>item.text).join('\n'):'반복 구매 기록과 무게·용량 정보가 더 쌓이면 구매 시기와 단위가격을 비교해 추천할 수 있어요.'; }
   return `‘${q}’에 맞는 상품이나 분석 항목을 기록에서 찾지 못했어요. 저장된 상품명을 포함해 “치아바타 가격”, “자주 이용하는 매장”, “평균 할인율”, “가격이 오른 상품”처럼 물어보세요.`;
 }
 
-function addAdvisorMessage(text, role) {
-  const div=document.createElement('div'); div.className=`advisor-message ${role}`; div.textContent=text; els.advisorMessages.appendChild(div); els.advisorMessages.scrollTop=els.advisorMessages.scrollHeight;
+function advisorSource(question) {
+  if (/행사|언제|공식/.test(question)) return '내 행사 기록 · 현재 행사는 공식 확인 필요';
+  if (/추천|가성비|뭘.*살/.test(question)) return '내 구매 기록 · 단위가격 계산';
+  return '내 기기에 저장된 지출 기록';
+}
+
+function addAdvisorMessage(text, role, source='') {
+  const div=document.createElement('div'); div.className=`advisor-message ${role}`;
+  if(source){const small=document.createElement('small');small.textContent=`분석 기준 · ${source}`;div.appendChild(small);}
+  div.appendChild(document.createTextNode(text)); els.advisorMessages.appendChild(div); els.advisorMessages.scrollTop=els.advisorMessages.scrollHeight;
 }
 
 function buildPriceTrends() {
@@ -985,11 +994,31 @@ function buildValueComparisons() {
   return Object.entries(groups).filter(([,list])=>list.length>=2).map(([kind,list])=>({kind,items:list.sort((a,b)=>a.unitPrice-b.unitPrice)}));
 }
 
+function buildPersonalRecommendations() {
+  const items=allPurchasedItems(); const groups={};
+  for(const item of items){const key=normalizedProductName(item.name);if(key)(groups[key]??=[]).push(item);}
+  const today=new Date(localDate()); const recommendations=[];
+  for(const list of Object.values(groups)){list.sort((a,b)=>a.date.localeCompare(b.date));const unique=[...new Set(list.map(i=>i.date))];if(unique.length>=2){const gaps=unique.slice(1).map((date,i)=>(new Date(date)-new Date(unique[i]))/86400000);const cycle=Math.round(gaps.reduce((a,b)=>a+b,0)/gaps.length);const since=Math.floor((today-new Date(unique.at(-1)))/86400000);if(cycle>0&&since>=cycle*.75)recommendations.push({score:since/cycle,text:`‘${list.at(-1).name}’은 평균 ${cycle}일 간격으로 샀고 마지막 구매 후 ${since}일 지났어요. 필요 수량과 현재 가격을 확인할 시기예요.`});}}
+  for(const trend of buildPriceTrends().filter(t=>t.changeRate>=5))recommendations.push({score:1+trend.changeRate/100,text:`${trend.store}의 ‘${trend.name}’ 최근 단가가 최초 기록보다 ${trend.changeRate.toFixed(1)}% 올랐어요. 다른 매장의 단위가격도 비교해보세요.`});
+  for(const group of buildValueComparisons()){const [best,next]=group.items;if(next&&next.unitPrice>best.unitPrice)recommendations.push({score:1.2,text:`${group.kind}은 현재 기록상 ‘${best.name}’이 ${best.unitLabel}당 ${won(Math.round(best.unitPrice))}으로 비교 상품보다 저렴해요.`});}
+  return recommendations.sort((a,b)=>b.score-a.score);
+}
+
+function buildStoreInsights() {
+  const groups={};
+  for(const record of state.purchases){const name=record.store||'미지정';groups[name]??={records:[],items:[]};groups[name].records.push(record);groups[name].items.push(...record.items);}
+  return Object.entries(groups).map(([store,data])=>{const products={};data.items.forEach(item=>products[item.name]=(products[item.name]||0)+item.quantity);const top=Object.entries(products).sort((a,b)=>b[1]-a[1])[0];const stats=discountStats(data.records);return{store,visits:data.records.length,total:data.records.reduce((s,r)=>s+r.total,0),average:data.records.reduce((s,r)=>s+r.total,0)/data.records.length,top,rate:stats.rate};}).sort((a,b)=>b.visits-a.visits||b.total-a.total);
+}
+
 function renderAdvancedAnalysis() {
   const trends=buildPriceTrends().sort((a,b)=>Math.abs(b.changeRate)-Math.abs(a.changeRate));
   els.priceTrendList.innerHTML=trends.length?trends.slice(0,8).map(t=>`<div class="analysis-row"><strong>${escapeHtml(t.name)}</strong><span>${escapeHtml(t.store)} · 평균 ${won(Math.round(t.average))}</span><small>${won(t.first)} → ${won(t.latest)} · ${Math.abs(t.changeRate).toFixed(1)}% ${t.changeRate>=0?'인상':'인하'}</small></div>`).join(''):'<p class="cart-meta">같은 상품의 구매 기록이 2회 이상 쌓이면 표시됩니다.</p>';
   const comparisons=buildValueComparisons();
   els.valueComparisonList.innerHTML=comparisons.length?comparisons.slice(0,6).map(group=>{const best=group.items[0];return `<div class="analysis-row best"><strong>${escapeHtml(group.kind)} 추천: ${escapeHtml(best.name)}</strong><span>${escapeHtml(best.store)} · ${best.unitLabel}당 ${won(Math.round(best.unitPrice))}</span><small>${group.items.slice(0,3).map(i=>`${escapeHtml(i.name)} ${won(Math.round(i.unitPrice))}`).join(' / ')}</small></div>`;}).join(''):'<p class="cart-meta">같은 종류의 상품에 무게·용량(g/kg/ml/L) 또는 개수를 입력하면 단위가격을 비교합니다.</p>';
+  const recommendations=buildPersonalRecommendations();
+  els.personalRecommendationList.innerHTML=recommendations.length?recommendations.slice(0,6).map(item=>`<div class="analysis-row best"><strong>추천</strong><span>${escapeHtml(item.text)}</span></div>`).join(''):'<p class="cart-meta">반복 구매와 가격 기록이 쌓이면 구매 시기와 절약 방법을 추천합니다.</p>';
+  const stores=buildStoreInsights();
+  els.storeInsightList.innerHTML=stores.length?stores.slice(0,6).map(item=>`<div class="analysis-row"><strong>${escapeHtml(item.store)}</strong><span>${item.visits}회 · 총 ${won(item.total)} · 회당 평균 ${won(Math.round(item.average))}</span><small>내가 가장 많이 산 상품: ${escapeHtml(item.top?.[0]||'-')} ${item.top?.[1]||0}개 · 평균 할인율 ${item.rate.toFixed(1)}%</small></div>`).join(''):'<p class="cart-meta">저장된 매장 이용 기록이 없습니다.</p>';
 }
 
 function receiptPriceCandidates(text) {
@@ -1367,10 +1396,14 @@ els.dashboardMonth.addEventListener('change', renderDashboard);
 els.dashboardStore.addEventListener('change', renderDashboard);
 els.advisorForm.addEventListener('submit', (event) => {
   event.preventDefault(); const question=els.advisorInput.value.trim(); if(!question)return;
-  addAdvisorMessage(question,'user'); addAdvisorMessage(answerAdvisor(question),'bot'); els.advisorInput.value='';
+  addAdvisorMessage(question,'user'); addAdvisorMessage(answerAdvisor(question),'bot',advisorSource(question)); els.advisorInput.value='';
 });
 document.querySelector('.advisor-suggestions').addEventListener('click', (event) => {
-  const button=event.target.closest('button'); if(!button)return; addAdvisorMessage(button.textContent,'user'); addAdvisorMessage(answerAdvisor(button.textContent),'bot');
+  const button=event.target.closest('button'); if(!button)return; addAdvisorMessage(button.textContent,'user'); addAdvisorMessage(answerAdvisor(button.textContent),'bot',advisorSource(button.textContent));
+});
+els.dashboardEventSearch.addEventListener('click', () => {
+  const store=els.dashboardStore.value==='all'?'대형마트 편의점':els.dashboardStore.value;
+  window.open(`https://search.naver.com/search.naver?query=${encodeURIComponent(`${store} ${localDate().slice(0,7)} 공식 행사 할인`)}`,'_blank','noopener,noreferrer');
 });
 els.receiptPhotoButton.addEventListener('click', () => els.receiptPhoto.click());
 els.receiptPhoto.addEventListener('change', async () => { const file=els.receiptPhoto.files[0]; if(file)await checkReceipt(file); els.receiptPhoto.value=''; });

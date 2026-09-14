@@ -5,7 +5,7 @@ const state = { mode: 'product', pendingCode: null, pendingProductImage: null, p
 const $ = (id) => document.getElementById(id);
 const els = {
   video: $('video'), cameraStage: $('cameraStage'), cameraPlaceholder: $('cameraPlaceholder'), cameraButton: $('cameraButton'), captureScanButton: $('captureScanButton'),
-  productPhotoButton: $('productPhotoButton'), productPhoto: $('productPhoto'), productPhotoReady: $('productPhotoReady'), productPhotoPreview: $('productPhotoPreview'), productDialogPreview: $('productDialogPreview'), productOcrLabel: $('productOcrLabel'), productOcrText: $('productOcrText'),
+  productPhotoButton: $('productPhotoButton'), productPhoto: $('productPhoto'), productPhotoReady: $('productPhotoReady'), productPhotoPreview: $('productPhotoPreview'), productDialogPreview: $('productDialogPreview'),
   scanInsight: $('scanInsight'), scanInsightName: $('scanInsightName'), scanInsightDetail: $('scanInsightDetail'), scanInsightPrice: $('scanInsightPrice'), scanInsightSource: $('scanInsightSource'),
   switchModeButton: $('switchModeButton'), modeBadge: $('modeBadge'), scannerTitle: $('scannerTitle'), scanStatus: $('scanStatus'),
   quantityForm: $('quantityForm'), quantityInput: $('quantityInput'), quantityLabel: $('quantityLabel'), quantitySubmit: $('quantitySubmit'), cartList: $('cartList'), emptyState: $('emptyState'),
@@ -71,8 +71,6 @@ function addToCart(code) {
     els.productName.value = '';
     els.productWeight.value = '';
     els.productPrice.value = '';
-    els.productOcrText.value = '';
-    els.productOcrLabel.hidden = true;
     els.productDialogPreview.hidden = !state.pendingProductImage;
     if (state.pendingProductImage) els.productDialogPreview.src = state.pendingProductImage;
     els.dialog.showModal();
@@ -268,17 +266,23 @@ function parseProductAndPrice(text) {
     const cleaned = line
     .replace(/(?:₩|￦)?\s*\d{1,3}(?:,\d{3})+\s*원?/g, ' ')
     .replace(/\d{3,7}\s*원/g, ' ')
+    .replace(/\d+(?:[.,]\d+)?\s*(?:kg|㎏|킬로그램|g|그램|ml|mL|㎖|l|L|리터)/gi, ' ')
+    .replace(/\(\s*\d+\s*(?:인분|개입|입)\s*\)/g, ' ')
     .replace(/정상가|판매가|구매가|회원가|행사가|할인가|할인|행사|바코드|카드|포인트|기간/gi, ' ')
       .replace(/\s+/g, ' ').trim();
     let score = Math.max(0, 6 - index);
     if (/\d+(?:[.,]\d+)?\s*(?:kg|㎏|g|그램|ml|mL|㎖|l|L|리터)/i.test(line)) score += 10;
+    if (/[가-힣]{3,}/.test(cleaned)) score += 9;
     if (cleaned.length >= 4 && cleaned.length <= 38) score += 5;
     if (/제조|사용|원산지|정석|비법|맛 그대로|얼큰|칼칼|100g당|적립|할인/.test(line)) score -= 8;
     return { line: cleaned, score };
   }).filter(({ line }) => /[가-힣A-Za-z]{2}/.test(line) && !/^\d[\d\s.,%-]*$/.test(line))
     .sort((a, b) => b.score - a.score || Math.min(b.line.length, 45) - Math.min(a.line.length, 45));
   const weightMatch = String(text || '').match(/(\d+(?:[.,]\d+)?)\s*(kg|㎏|킬로그램|g|그램|ml|mL|㎖|l|L|리터)(?![A-Za-z])/i);
-  const weight = weightMatch ? `${weightMatch[1].replace(',', '.')}${weightMatch[2].replace(/킬로그램|㎏/i, 'kg').replace(/그램/i, 'g').replace(/㎖/i, 'ml').replace(/리터/i, 'L')}` : '';
+  let weightNumber = weightMatch?.[1]?.replace(',', '.') || '';
+  const weightUnit = weightMatch?.[2]?.replace(/킬로그램|㎏/i, 'kg').replace(/그램/i, 'g').replace(/㎖/i, 'ml').replace(/리터/i, 'L') || '';
+  if (/kg/i.test(weightUnit) && /^\d{4}$/.test(weightNumber) && Number(weightNumber) < 10000) weightNumber = `${weightNumber[0]}.${weightNumber.slice(1)}`;
+  const weight = weightMatch ? `${weightNumber}${weightUnit}` : '';
   return { name: (nameCandidates[0]?.line || '').slice(0, 80), price: priced[0]?.value || '', weight, text: lines.join('\n').slice(0, 1500) };
 }
 
@@ -493,6 +497,26 @@ async function getProductOcrWorker() {
   return state.ocrWorkerPromise;
 }
 
+function cropTitleCanvas(source) {
+  const canvas = document.createElement('canvas');
+  canvas.width = source.width;
+  canvas.height = Math.max(1, Math.round(source.height * .58));
+  const ctx = canvas.getContext('2d', { alpha: false });
+  ctx.drawImage(source, 0, 0, source.width, canvas.height, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
+async function recognizeTitleRegion(worker, canvas) {
+  try {
+    els.scanStatus.textContent = '가격표의 상품명을 집중해서 읽는 중입니다…';
+    await worker.setParameters({ tessedit_pageseg_mode: '6', tessedit_char_whitelist: '', preserve_interword_spaces: '1' });
+    const result = await worker.recognize(cropTitleCanvas(canvas));
+    return result.data.text || '';
+  } finally {
+    await worker.setParameters({ tessedit_pageseg_mode: '11', preserve_interword_spaces: '1' }).catch(() => {});
+  }
+}
+
 function resizeProductPhoto(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -535,8 +559,8 @@ async function recognizeProductPhoto(file) {
       lowDetail = prepared.lowDetail;
       const worker = await getProductOcrWorker();
       const result = await worker.recognize(prepared.canvas);
-      parsed = parseProductAndPrice(result.data.text);
-      if (result.data.confidence < 25) parsed.name = '';
+      const titleText = await recognizeTitleRegion(worker, prepared.canvas);
+      parsed = parseProductAndPrice(`${titleText}\n${result.data.text}`);
       if (!parsed.price) parsed.price = await recognizePriceNumbers(worker, prepared.canvas);
     } catch (_) {
       parsed.text = '사진 글자 인식에 실패했습니다. 상품명과 가격을 직접 확인해주세요.';
@@ -562,8 +586,6 @@ async function recognizeProductPhoto(file) {
   els.productCategory.value = existing?.category || inferCategory(parsed.name);
   els.productDialogPreview.src = state.pendingProductImage;
   els.productDialogPreview.hidden = false;
-  els.productOcrText.value = parsed.text || '사진에서 글자를 찾지 못했습니다.';
-  els.productOcrLabel.hidden = false;
   showDetectedDiscount(offer);
   els.dialog.showModal();
   const shownPrice = offer.type !== 'none' ? offer.finalPrice : parsed.price;
@@ -1053,15 +1075,6 @@ els.detectedDiscountCondition.addEventListener('input', () => {
   const conditional = Boolean(els.detectedDiscountCondition.value.trim()) && els.detectedDiscountCondition.value.trim() !== '별도 조건 문구 없음';
   els.discountRequirementBadge.textContent = conditional ? '조건부 할인' : '조건 없는 할인';
   els.discountRequirementBadge.classList.toggle('conditional', conditional);
-});
-els.productOcrText.addEventListener('change', () => {
-  const parsed = parseProductAndPrice(els.productOcrText.value);
-  if (parsed.name) els.productName.value = parsed.name;
-  if (parsed.weight) els.productWeight.value = parsed.weight;
-  const offer = analyzeDiscountOffer(els.productOcrText.value, parsed.price || els.productPrice.value);
-  if (offer.originalPrice) els.productPrice.value = offer.originalPrice;
-  els.productCategory.value = inferCategory(els.productName.value);
-  showDetectedDiscount(offer);
 });
 els.productForm.addEventListener('submit', (event) => {
   event.preventDefault();

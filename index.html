@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=31">
+  <link rel="stylesheet" href="styles.css?v=32">
 </head>
 <body>
   <div class="background-world" aria-hidden="true">
@@ -149,6 +149,7 @@
         <span><b>1</b> 가격표 촬영</span><i>→</i><span><b>2</b> 글자·금액 인식</span><i>→</i><span><b>3</b> 자동 등록</span>
       </div>
       <button id="productPhotoButton" class="product-photo-button single-scan-button" type="button">📷 스캔하기</button>
+      <button id="liveScanButton" class="live-scan-button" type="button">◎ 갖다 대고 무음 자동 인식</button>
       <input id="productPhoto" type="file" accept="image/*" capture="environment" hidden>
       <div id="productPhotoReady" class="product-photo-ready" hidden>
         <img id="productPhotoPreview" alt="촬영한 가격표"><span>가격표 인식 완료<br><small>상품명과 금액을 장바구니에 등록했습니다.</small></span>
@@ -159,7 +160,7 @@
         <div><span>적용 가격</span><strong id="scanInsightPrice">-</strong><small id="scanInsightSource"></small></div>
       </div>
 
-      <div class="legacy-scanner" aria-hidden="true">
+      <div id="liveCameraPanel" class="legacy-scanner" aria-hidden="true">
       <div id="cameraStage" class="camera-stage">
         <video id="video" playsinline muted></video>
         <div class="scan-frame" aria-hidden="true"></div>
@@ -321,7 +322,7 @@
 
   <div id="toast" class="toast" role="status"></div>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="app.js?v=31"></script>
+  <script src="app.js?v=32"></script>
 </body>
 </html>
 

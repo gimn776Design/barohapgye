@@ -1,11 +1,11 @@
 const savedCatalog = JSON.parse(localStorage.getItem('quickSumCatalog') || '{}');
 const savedPurchases = JSON.parse(localStorage.getItem('quickSumPurchases') || '[]');
-const state = { mode: 'product', pendingCode: null, pendingProductImage: null, promotionCode: null, pendingBackup: null, catalog: savedCatalog, cart: {}, purchases: savedPurchases, stream: null, scanning: false, lastScan: { value: '', at: 0 }, ocrWorkerPromise: null };
+const state = { mode: 'product', pendingCode: null, pendingFingerprint: '', pendingProductImage: null, promotionCode: null, pendingBackup: null, catalog: savedCatalog, cart: {}, purchases: savedPurchases, stream: null, scanning: false, liveScanning: false, liveBusy: false, liveCandidate: { signature: '', count: 0 }, lastScan: { value: '', at: 0 }, ocrWorkerPromise: null };
 
 const $ = (id) => document.getElementById(id);
 const els = {
   video: $('video'), cameraStage: $('cameraStage'), cameraPlaceholder: $('cameraPlaceholder'), cameraButton: $('cameraButton'), captureScanButton: $('captureScanButton'),
-  productPhotoButton: $('productPhotoButton'), productPhoto: $('productPhoto'), productPhotoReady: $('productPhotoReady'), productPhotoPreview: $('productPhotoPreview'), productDialogPreview: $('productDialogPreview'),
+  productPhotoButton: $('productPhotoButton'), liveScanButton: $('liveScanButton'), liveCameraPanel: $('liveCameraPanel'), productPhoto: $('productPhoto'), productPhotoReady: $('productPhotoReady'), productPhotoPreview: $('productPhotoPreview'), productDialogPreview: $('productDialogPreview'),
   scanInsight: $('scanInsight'), scanInsightName: $('scanInsightName'), scanInsightDetail: $('scanInsightDetail'), scanInsightPrice: $('scanInsightPrice'), scanInsightSource: $('scanInsightSource'),
   switchModeButton: $('switchModeButton'), modeBadge: $('modeBadge'), scannerTitle: $('scannerTitle'), scanStatus: $('scanStatus'),
   quantityForm: $('quantityForm'), quantityInput: $('quantityInput'), quantityLabel: $('quantityLabel'), quantitySubmit: $('quantitySubmit'), cartList: $('cartList'), emptyState: $('emptyState'),
@@ -251,7 +251,8 @@ function cleanProduct(value) {
   if (!Number.isFinite(price) || price < 0) return null;
   const image = typeof value.image === 'string' && /^data:image\/(?:jpeg|png|webp);base64,/.test(value.image) && value.image.length <= 400000 ? value.image : undefined;
   const weight = typeof value.weight === 'string' ? value.weight.slice(0, 40) : '';
-  return { name: value.name.slice(0, 200), price, weight, category: typeof value.category === 'string' ? value.category.slice(0, 80) : '미분류', ...(image ? { image } : {}) };
+  const scanFingerprint = typeof value.scanFingerprint === 'string' ? value.scanFingerprint.slice(0, 500) : '';
+  return { name: value.name.slice(0, 200), price, weight, category: typeof value.category === 'string' ? value.category.slice(0, 80) : '미분류', ...(scanFingerprint ? { scanFingerprint } : {}), ...(image ? { image } : {}) };
 }
 
 function parseProductAndPrice(text) {
@@ -431,6 +432,13 @@ function normalizedProductName(value) {
   return String(value || '').toLowerCase().replace(/\d+(?:[.,]\d+)?\s*(?:kg|g|ml|l|개입|입)/gi, '').replace(/[^가-힣a-z0-9]/g, '');
 }
 
+function scanFingerprint(product) {
+  const name=normalizedProductName(product?.name);
+  const weight=String(product?.weight||'').toLowerCase().replace(/\s+/g,'').replace('×','x');
+  const price=Number(product?.price)||0;
+  return name.length>=2&&price>0?`${name}|${price}|${weight}`:'';
+}
+
 function cleanRecognizedProductName(value) {
   const text=String(value||'').replace(/^[\d\W_]+|[\W_]+$/g,' ').replace(/\s+/g,' ').trim();
   const korean=(text.match(/[가-힣]/g)||[]).length, latin=(text.match(/[A-Za-z]/g)||[]).length;
@@ -451,10 +459,9 @@ function findCatalogMatch(name) {
   return partial;
 }
 
-function findCatalogSignatureMatch(price, weight) {
-  if(!price)return null; const normalizedWeight=String(weight||'').toLowerCase().replace(/\s/g,'');
-  let matches=Object.entries(state.catalog).filter(([,product])=>Number(product.price)===Number(price));
-  if(normalizedWeight){const exactWeight=matches.filter(([,product])=>String(product.weight||'').toLowerCase().replace(/\s/g,'')===normalizedWeight);if(exactWeight.length)matches=exactWeight;}
+function findCatalogFingerprintMatch(fingerprint) {
+  if(!fingerprint)return null;
+  const matches=Object.entries(state.catalog).filter(([,product])=>product.scanFingerprint===fingerprint||scanFingerprint(product)===fingerprint);
   return matches.length===1?{code:matches[0][0],product:matches[0][1]}:null;
 }
 
@@ -662,7 +669,8 @@ async function recognizeProductPhoto(file) {
     }
   }
   const priceReadFromPhoto = Boolean(parsed.price);
-  const match = findCatalogMatch(parsed.name) || findCatalogSignatureMatch(parsed.price, parsed.weight);
+  const fingerprint=scanFingerprint(parsed);
+  const match = findCatalogFingerprintMatch(fingerprint) || findCatalogMatch(parsed.name);
   const key = parsed.name.toLowerCase().replace(/[^가-힣a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 70);
   const code = barcode || match?.code || `photo:${key || Date.now()}`;
   const existing = state.catalog[barcode] || state.catalog[code] || match?.product;
@@ -674,6 +682,12 @@ async function recognizeProductPhoto(file) {
   const offer = analyzeDiscountOffer(parsed.text, parsed.price || existing?.price);
   if (offer.originalPrice) parsed.price = offer.originalPrice;
   state.pendingCode = code;
+  state.pendingFingerprint = fingerprint;
+  if(match?.product&&fingerprint&&findCatalogFingerprintMatch(fingerprint)) {
+    state.pendingCode=match.code; state.pendingProductImage=null; addToCart(match.code);
+    els.scanStatus.textContent=`동일한 저장 상품 ‘${match.product.name}’을 불러왔습니다.`;
+    return true;
+  }
   els.dialogCode.textContent = '상품·가격표 사진으로 등록';
   els.productName.value = existing?.name || parsed.name;
   els.productWeight.value = existing?.weight || parsed.weight;
@@ -1139,8 +1153,8 @@ async function readPromotionPhoto(file) {
   }
 }
 
-async function startCamera() {
-  if (!('BarcodeDetector' in window)) {
+async function startCamera(barcodeMode = true) {
+  if (barcodeMode && !('BarcodeDetector' in window)) {
     els.scanStatus.textContent = '이 브라우저는 카메라 바코드 인식을 지원하지 않습니다. Chrome/Edge 또는 직접 입력을 이용하세요.';
     return;
   }
@@ -1164,8 +1178,8 @@ async function startCamera() {
     els.cameraStage.classList.add('active');
     els.cameraButton.textContent = '카메라 끄기';
     els.scanStatus.textContent = '바코드나 QR이 초록색 안내선 안에 크게 보이도록 가까이 대주세요.';
-    state.scanning = true;
-    void scanLoop();
+    state.scanning = barcodeMode;
+    if (barcodeMode) void scanLoop();
   } catch (error) {
     els.scanStatus.textContent = '카메라 권한을 허용해주세요. HTTPS 또는 localhost에서 실행해야 합니다.';
   }
@@ -1173,12 +1187,49 @@ async function startCamera() {
 
 function stopCamera() {
   state.scanning = false;
+  state.liveScanning = false;
+  state.liveBusy = false;
+  state.liveCandidate = { signature: '', count: 0 };
   state.stream?.getTracks().forEach((track) => track.stop());
   state.stream = null;
   els.video.srcObject = null;
   els.cameraPlaceholder.hidden = false;
   els.cameraStage.classList.remove('active');
   els.cameraButton.textContent = '카메라 켜기';
+  els.liveCameraPanel.classList.remove('live-visible');
+  els.liveScanButton.classList.remove('active');
+  els.liveScanButton.textContent = '◎ 갖다 대고 무음 자동 인식';
+}
+
+function videoFrameCanvas() {
+  if(els.video.readyState<HTMLMediaElement.HAVE_CURRENT_DATA)return null;
+  const canvas=document.createElement('canvas');canvas.width=els.video.videoWidth;canvas.height=els.video.videoHeight;
+  canvas.getContext('2d',{alpha:false}).drawImage(els.video,0,0);return canvas;
+}
+
+function canvasFile(canvas) {
+  return new Promise(resolve=>canvas.toBlob(blob=>resolve(blob?new File([blob],`live-${Date.now()}.jpg`,{type:'image/jpeg'}):null),'image/jpeg',.9));
+}
+
+async function readLiveCandidate(canvas) {
+  const worker=await getProductOcrWorker();const focused=cropPriceLabelCanvas(canvas);
+  await worker.setParameters({tessedit_pageseg_mode:'6',tessedit_char_whitelist:'',preserve_interword_spaces:'1'});
+  const result=await worker.recognize(focused);
+  await worker.setParameters({tessedit_pageseg_mode:'11',preserve_interword_spaces:'1'});
+  const parsed=parseProductAndPrice(result.data.text||'');parsed.name=cleanRecognizedProductName(parsed.name);return parsed;
+}
+
+async function liveTextScanLoop() {
+  if(!state.liveScanning||!state.stream)return;
+  if(!state.liveBusy){state.liveBusy=true;try{const canvas=videoFrameCanvas();if(canvas){els.scanStatus.textContent='소리 없이 상품명·가격·무게를 확인하는 중입니다…';const parsed=await readLiveCandidate(canvas);const signature=scanFingerprint(parsed);if(signature&&signature===state.liveCandidate.signature)state.liveCandidate.count+=1;else state.liveCandidate={signature,count:signature?1:0};if(state.liveCandidate.count>=2){const file=await canvasFile(canvas);stopCamera();if(file)await recognizeProductPhoto(file);return;}els.scanStatus.textContent=signature?'같은 내용이 한 번 더 확인되면 자동 인식합니다.':'가격표를 초록색 영역 안에 더 크게 맞춰주세요.';}}catch(_){els.scanStatus.textContent='초점을 맞추는 중입니다. 가격표를 잠시 그대로 유지해주세요.';}finally{state.liveBusy=false;}}
+  if(state.liveScanning)setTimeout(liveTextScanLoop,900);
+}
+
+async function toggleLiveScan() {
+  if(state.liveScanning){stopCamera();return;}
+  stopCamera();els.liveCameraPanel.classList.add('live-visible');els.liveScanButton.classList.add('active');els.liveScanButton.textContent='자동 인식 중지';
+  await startCamera(false);if(!state.stream){els.liveCameraPanel.classList.remove('live-visible');els.liveScanButton.classList.remove('active');return;}
+  state.liveScanning=true;state.liveCandidate={signature:'',count:0};els.scanStatus.textContent='촬영음 없이 자동 인식합니다. 가격표를 초록색 영역에 맞춰주세요.';void liveTextScanLoop();
 }
 
 async function createBarcodeDetector() {
@@ -1254,6 +1305,7 @@ async function scanLoop() {
 }
 
 els.cameraButton.addEventListener('click', () => state.stream ? stopCamera() : startCamera());
+els.liveScanButton.addEventListener('click', toggleLiveScan);
 els.captureScanButton.addEventListener('click', captureAndScan);
 els.productPhotoButton.addEventListener('click', () => els.productPhoto.click());
 els.productPhoto.addEventListener('change', async () => {
@@ -1298,7 +1350,7 @@ els.productForm.addEventListener('submit', (event) => {
   const price = Number(els.productPrice.value.replaceAll(',', ''));
   if (!name || !Number.isFinite(price)) return;
   const code = state.pendingCode;
-  state.catalog[code] = { name, price, weight, ...(state.pendingProductImage ? { image: state.pendingProductImage } : {}) };
+  state.catalog[code] = { name, price, weight, scanFingerprint: state.pendingFingerprint || scanFingerprint({name,price,weight}), ...(state.pendingProductImage ? { image: state.pendingProductImage } : {}) };
   state.catalog[code].category = els.productCategory.value;
   saveCatalog();
   els.dialog.close();

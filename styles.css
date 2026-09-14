@@ -49,6 +49,7 @@ h2 { margin-bottom: 0; font-size: 20px; letter-spacing: -.03em; }
 .product-photo-button { width: 100%; min-height: 50px; margin-top: 10px; border: 1px solid #cfd7ef; border-radius: 14px; color: #5638be; background: #f5f1ff; font-weight: 900; }
 .single-scan-button { min-height: 62px; border: 0; color: #fff; background: linear-gradient(115deg, #5d55ed, #9a49e7 55%, #ec5d9f); box-shadow: 0 12px 28px rgba(112,76,222,.28); font-size: 19px; }
 .legacy-scanner { display: none !important; }
+.legacy-scanner.live-visible{display:block!important}.legacy-scanner.live-visible .scanner-actions,.legacy-scanner.live-visible .capture-scan-button{display:none}.live-scan-button{width:100%;min-height:54px;margin-top:9px;border:2px solid #6d55ed;border-radius:15px;background:#fff;color:#583fd0;font-weight:950;font-size:16px}.live-scan-button.active{border-color:#d8ff68;background:#17213b;color:#d8ff68}.legacy-scanner.live-visible .camera-stage{height:min(62vh,560px);min-height:390px}.legacy-scanner.live-visible .scan-frame{border-color:#d8ff68;animation:livePulse 1.4s ease-in-out infinite}@keyframes livePulse{50%{box-shadow:0 0 0 999px rgba(4,12,28,.22),0 0 32px rgba(216,255,104,.75)}}
 .product-photo-ready { display: flex; align-items: center; gap: 11px; margin-top: 9px; padding: 9px; border: 1px solid #bce6cf; border-radius: 13px; color: #22633f; background: #effbf4; font-size: 12px; font-weight: 850; }
 .product-photo-ready[hidden] { display: none !important; }
 .product-photo-ready img { width: 54px; height: 54px; border-radius: 10px; object-fit: cover; }

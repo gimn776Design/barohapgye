@@ -417,6 +417,13 @@ function normalizedProductName(value) {
   return String(value || '').toLowerCase().replace(/\d+(?:[.,]\d+)?\s*(?:kg|g|ml|l|개입|입)/gi, '').replace(/[^가-힣a-z0-9]/g, '');
 }
 
+function cleanRecognizedProductName(value) {
+  const text=String(value||'').replace(/^[\d\W_]+|[\W_]+$/g,' ').replace(/\s+/g,' ').trim();
+  const korean=(text.match(/[가-힣]/g)||[]).length, latin=(text.match(/[A-Za-z]/g)||[]).length;
+  if(korean>=2 && latin>korean){const koreanOnly=(text.match(/[가-힣]{2,}/g)||[]).join(' ');const kind=productKind(koreanOnly,'');return kind||koreanOnly;}
+  return text;
+}
+
 function findCatalogMatch(name) {
   const target = normalizedProductName(name);
   if (target.length < 3) return null;
@@ -427,6 +434,12 @@ function findCatalogMatch(name) {
     if (!partial && Math.min(candidate.length, target.length) >= 5 && (candidate.includes(target) || target.includes(candidate))) partial = { code, product };
   }
   return partial;
+}
+
+function findCatalogSignatureMatch(price, weight) {
+  if(!price||!weight)return null; const normalizedWeight=String(weight).toLowerCase().replace(/\s/g,'');
+  const matches=Object.entries(state.catalog).filter(([,product])=>Number(product.price)===Number(price)&&String(product.weight||'').toLowerCase().replace(/\s/g,'')===normalizedWeight);
+  return matches.length===1?{code:matches[0][0],product:matches[0][1]}:null;
 }
 
 function findRecentStorePrice(code, name) {
@@ -490,7 +503,7 @@ async function prepareOcrCanvas(file) {
 
 async function getProductOcrWorker() {
   if (!state.ocrWorkerPromise) {
-    state.ocrWorkerPromise = Tesseract.createWorker('kor+eng', 1, {
+    state.ocrWorkerPromise = Tesseract.createWorker('kor', 1, {
       logger: ({ status, progress }) => {
         if (status === 'recognizing text') els.scanStatus.textContent = `필요한 정보 인식 중 ${Math.round(progress * 100)}%`;
       }
@@ -532,11 +545,36 @@ function cropTightPriceLabelCanvas(source) {
   return canvas;
 }
 
+function cropProductTitleLine(source) {
+  const cropX = Math.round(source.width * .08);
+  const cropY = Math.round(source.height * .14);
+  const cropWidth = Math.round(source.width * .84);
+  const cropHeight = Math.round(source.height * .43);
+  const canvas = document.createElement('canvas');
+  canvas.width = cropWidth;
+  canvas.height = cropHeight;
+  const ctx = canvas.getContext('2d', { alpha: false });
+  ctx.filter = 'grayscale(1) contrast(2)';
+  ctx.drawImage(source, cropX, cropY, cropWidth, cropHeight, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
 async function recognizeTitleRegion(worker, canvas) {
   try {
     els.scanStatus.textContent = '가격표의 상품명을 집중해서 읽는 중입니다…';
     await worker.setParameters({ tessedit_pageseg_mode: '6', tessedit_char_whitelist: '', preserve_interword_spaces: '1' });
     const result = await worker.recognize(canvas);
+    return result.data.text || '';
+  } finally {
+    await worker.setParameters({ tessedit_pageseg_mode: '11', preserve_interword_spaces: '1' }).catch(() => {});
+  }
+}
+
+async function recognizeSingleProductTitle(worker, canvas) {
+  try {
+    els.scanStatus.textContent = '한글 상품명 줄을 정밀하게 읽는 중입니다…';
+    await worker.setParameters({ tessedit_pageseg_mode: '7', tessedit_char_whitelist: '', preserve_interword_spaces: '1' });
+    const result = await worker.recognize(cropProductTitleLine(canvas));
     return result.data.text || '';
   } finally {
     await worker.setParameters({ tessedit_pageseg_mode: '11', preserve_interword_spaces: '1' }).catch(() => {});
@@ -588,8 +626,9 @@ async function recognizeProductPhoto(file) {
       const focusedLabel = cropPriceLabelCanvas(prepared.canvas);
       const tightLabel = cropTightPriceLabelCanvas(prepared.canvas);
       const titleText = await recognizeTitleRegion(worker, focusedLabel);
-      const tightText = await recognizeTitleRegion(worker, tightLabel);
+      const tightText = await recognizeSingleProductTitle(worker, tightLabel);
       parsed = parseProductAndPrice(`${tightText}\n${titleText}\n${result.data.text}`);
+      parsed.name = cleanRecognizedProductName(parsed.name);
       const verifiedPrice = await recognizePriceNumbers(worker, tightLabel);
       if (verifiedPrice && (!parsed.price || verifiedPrice > parsed.price * 1.5 || (parsed.price % 10 !== 0 && verifiedPrice % 10 === 0))) parsed.price = verifiedPrice;
     } catch (_) {
@@ -597,7 +636,7 @@ async function recognizeProductPhoto(file) {
     }
   }
   const priceReadFromPhoto = Boolean(parsed.price);
-  const match = findCatalogMatch(parsed.name);
+  const match = findCatalogMatch(parsed.name) || findCatalogSignatureMatch(parsed.price, parsed.weight);
   const key = parsed.name.toLowerCase().replace(/[^가-힣a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 70);
   const code = barcode || match?.code || `photo:${key || Date.now()}`;
   const existing = state.catalog[barcode] || state.catalog[code] || match?.product;

@@ -882,6 +882,7 @@ function saveCurrentPurchase() {
   refreshStoreFilter();
   state.cart = {};
   state.pendingCode = null;
+  els.purchaseBranch.value = '';
   resetQuantityControl();
   render();
   els.dashboardMonth.value = record.date.slice(0, 7);
@@ -1495,6 +1496,7 @@ els.purchaseStore.addEventListener('change', () => {
   const isCustom = els.purchaseStore.value === '__custom__';
   els.customStoreEntry.hidden = !isCustom;
   if (isCustom) els.purchaseCustomStore.focus();
+  else { els.purchaseCustomStore.value = ''; els.purchaseBranch.value = ''; }
 });
 els.saveCustomStore.addEventListener('click', saveDirectStore);
 els.purchaseCustomStore.addEventListener('keydown', (event) => {

@@ -1219,7 +1219,7 @@ function canvasFile(canvas) {
 }
 
 function cropLiveGuideCanvas(source) {
-  const cropX=Math.round(source.width*.08),cropY=Math.round(source.height*.33),cropWidth=Math.round(source.width*.84),cropHeight=Math.round(source.height*.34);
+  const cropX=Math.round(source.width*.03),cropY=Math.round(source.height*.33),cropWidth=Math.round(source.width*.94),cropHeight=Math.round(source.height*.34);
   const scale=Math.min(2,1600/Math.max(cropWidth,cropHeight));const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(cropWidth*scale));canvas.height=Math.max(1,Math.round(cropHeight*scale));
   const ctx=canvas.getContext('2d',{alpha:false});ctx.filter='grayscale(1) contrast(1.55)';ctx.drawImage(source,cropX,cropY,cropWidth,cropHeight,0,0,canvas.width,canvas.height);return canvas;
 }

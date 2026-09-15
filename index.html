@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=36">
+  <link rel="stylesheet" href="styles.css?v=37">
 </head>
 <body>
   <div class="background-world" aria-hidden="true">
@@ -71,7 +71,10 @@
           <option>GS25</option><option>CU</option><option>세븐일레븐</option><option>이마트24</option><option>미니스톱</option>
           <option>스타벅스</option><option>투썸플레이스</option><option>메가커피</option><option>컴포즈커피</option><option>카페</option><option>기타</option><option value="__custom__">직접 입력</option>
         </select>
-        <input id="purchaseCustomStore" type="text" maxlength="40" placeholder="매장 이름 직접 입력" hidden>
+        <div id="customStoreEntry" class="custom-store-entry" hidden>
+          <input id="purchaseCustomStore" type="text" maxlength="40" placeholder="매장 이름 직접 입력">
+          <button id="saveCustomStore" type="button">매장 저장</button>
+        </div>
         <input id="purchaseBranch" type="text" maxlength="40" placeholder="지점명(선택)">
       </div>
     </section>
@@ -324,7 +327,7 @@
 
   <div id="toast" class="toast" role="status"></div>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="app.js?v=36"></script>
+  <script src="app.js?v=37"></script>
 </body>
 </html>
 

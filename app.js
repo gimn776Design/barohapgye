@@ -20,7 +20,7 @@ const els = {
   promotionText: $('promotionText'), promotionType: $('promotionType'), promotionFields: $('promotionFields'), cancelPromotion: $('cancelPromotion'),
   eventStore: $('eventStore'), eventBranch: $('eventBranch'), eventWebSearch: $('eventWebSearch'), officialEventSearch: $('officialEventSearch'), eventExplanation: $('eventExplanation'),
   installButton: $('installButton'), calculatorView: $('calculatorView'), dashboardView: $('dashboardView'),
-  purchaseDate: $('purchaseDate'), purchaseStore: $('purchaseStore'), purchaseCustomStore: $('purchaseCustomStore'), purchaseBranch: $('purchaseBranch'), savePurchaseButton: $('savePurchaseButton'), dashboardMonth: $('dashboardMonth'), dashboardStore: $('dashboardStore'),
+  purchaseDate: $('purchaseDate'), purchaseStore: $('purchaseStore'), customStoreEntry: $('customStoreEntry'), purchaseCustomStore: $('purchaseCustomStore'), saveCustomStore: $('saveCustomStore'), purchaseBranch: $('purchaseBranch'), savePurchaseButton: $('savePurchaseButton'), dashboardMonth: $('dashboardMonth'), dashboardStore: $('dashboardStore'),
   monthSpend: $('monthSpend'), purchaseCount: $('purchaseCount'), monthItemCount: $('monthItemCount'), topProduct: $('topProduct'), selectedStoreKpi: $('selectedStoreKpi'),
   dashboardEmpty: $('dashboardEmpty'), dashboardContent: $('dashboardContent'), monthlyChart: $('monthlyChart'),
   categoryChart: $('categoryChart'), categoryLegend: $('categoryLegend'), productRanking: $('productRanking'), historyList: $('historyList'),
@@ -474,6 +474,24 @@ function selectedPurchaseStore() {
   return els.purchaseStore.value === '__custom__' ? els.purchaseCustomStore.value.trim() : els.purchaseStore.value;
 }
 
+function saveDirectStore() {
+  const store = els.purchaseCustomStore.value.trim();
+  if (!store) return showToast('저장할 매장 이름을 입력해주세요.');
+  if (!state.customStores.includes(store) && !DEFAULT_STORES.includes(store)) {
+    state.customStores.push(store);
+    state.customStores.sort((a, b) => a.localeCompare(b, 'ko'));
+    saveCustomStores();
+  }
+  refreshPurchaseStoreList();
+  els.purchaseStore.value = store;
+  els.customStoreEntry.hidden = true;
+  els.purchaseCustomStore.value = '';
+  refreshStoreFilter();
+  renderDashboard();
+  showToast(`‘${store}’ 매장을 저장했습니다.`);
+  return store;
+}
+
 function findRecentStorePrice(code, name) {
   const store = selectedPurchaseStore();
   const target = normalizedProductName(name);
@@ -849,7 +867,7 @@ function saveCurrentPurchase() {
     refreshPurchaseStoreList();
     els.purchaseStore.value = store;
     els.purchaseCustomStore.value = '';
-    els.purchaseCustomStore.hidden = true;
+    els.customStoreEntry.hidden = true;
   }
   const record = {
     id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -1111,7 +1129,7 @@ function refreshPurchaseStoreList() {
   els.purchaseStore.innerHTML = stores.map((store) => `<option value="${escapeHtml(store)}">${escapeHtml(store)}</option>`).join('') + '<option value="__custom__">직접 입력</option>';
   els.purchaseStore.value = stores.includes(before) ? before : '__custom__';
   els.purchaseCustomStore.value = customValue;
-  els.purchaseCustomStore.hidden = els.purchaseStore.value !== '__custom__';
+  els.customStoreEntry.hidden = els.purchaseStore.value !== '__custom__';
 }
 
 function refreshStoreFilter() {
@@ -1475,8 +1493,12 @@ document.querySelectorAll('.view-tabs button').forEach((button) => button.addEve
 els.savePurchaseButton.addEventListener('click', openPurchaseSummary);
 els.purchaseStore.addEventListener('change', () => {
   const isCustom = els.purchaseStore.value === '__custom__';
-  els.purchaseCustomStore.hidden = !isCustom;
+  els.customStoreEntry.hidden = !isCustom;
   if (isCustom) els.purchaseCustomStore.focus();
+});
+els.saveCustomStore.addEventListener('click', saveDirectStore);
+els.purchaseCustomStore.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') { event.preventDefault(); saveDirectStore(); }
 });
 els.cancelCheckout.addEventListener('click', () => els.checkoutDialog.close());
 els.confirmPurchaseSave.addEventListener('click', () => {

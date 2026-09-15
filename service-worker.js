@@ -1,5 +1,5 @@
-const CACHE_NAME = 'barohapgye-v35';
-const APP_SHELL = ['./', './index.html', './styles.css?v=35', './app.js?v=35', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
+const CACHE_NAME = 'barohapgye-v36';
+const APP_SHELL = ['./', './index.html', './styles.css?v=36', './app.js?v=36', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));

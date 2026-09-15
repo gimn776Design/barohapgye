@@ -1,6 +1,8 @@
 const savedCatalog = JSON.parse(localStorage.getItem('quickSumCatalog') || '{}');
 const savedPurchases = JSON.parse(localStorage.getItem('quickSumPurchases') || '[]');
-const state = { mode: 'product', pendingCode: null, pendingFingerprint: '', pendingProductImage: null, promotionCode: null, pendingBackup: null, catalog: savedCatalog, cart: {}, purchases: savedPurchases, stream: null, scanning: false, liveScanning: false, liveBusy: false, liveCandidate: { signature: '', count: 0 }, lastScan: { value: '', at: 0 }, ocrWorkerPromise: null };
+const DEFAULT_STORES = ['트레이더스', '이마트', '홈플러스', '롯데마트', '코스트코', 'GS25', 'CU', '세븐일레븐', '이마트24', '미니스톱', '스타벅스', '투썸플레이스', '메가커피', '컴포즈커피', '카페', '기타'];
+const savedCustomStores = JSON.parse(localStorage.getItem('quickSumCustomStores') || '[]');
+const state = { mode: 'product', pendingCode: null, pendingFingerprint: '', pendingProductImage: null, promotionCode: null, pendingBackup: null, catalog: savedCatalog, cart: {}, purchases: savedPurchases, customStores: Array.isArray(savedCustomStores) ? savedCustomStores : [], stream: null, scanning: false, liveScanning: false, liveBusy: false, liveCandidate: { signature: '', count: 0 }, lastScan: { value: '', at: 0 }, ocrWorkerPromise: null };
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -18,7 +20,7 @@ const els = {
   promotionText: $('promotionText'), promotionType: $('promotionType'), promotionFields: $('promotionFields'), cancelPromotion: $('cancelPromotion'),
   eventStore: $('eventStore'), eventBranch: $('eventBranch'), eventWebSearch: $('eventWebSearch'), officialEventSearch: $('officialEventSearch'), eventExplanation: $('eventExplanation'),
   installButton: $('installButton'), calculatorView: $('calculatorView'), dashboardView: $('dashboardView'),
-  purchaseDate: $('purchaseDate'), purchaseStore: $('purchaseStore'), purchaseBranch: $('purchaseBranch'), savePurchaseButton: $('savePurchaseButton'), dashboardMonth: $('dashboardMonth'), dashboardStore: $('dashboardStore'),
+  purchaseDate: $('purchaseDate'), purchaseStore: $('purchaseStore'), purchaseCustomStore: $('purchaseCustomStore'), purchaseBranch: $('purchaseBranch'), savePurchaseButton: $('savePurchaseButton'), dashboardMonth: $('dashboardMonth'), dashboardStore: $('dashboardStore'),
   monthSpend: $('monthSpend'), purchaseCount: $('purchaseCount'), monthItemCount: $('monthItemCount'), topProduct: $('topProduct'), selectedStoreKpi: $('selectedStoreKpi'),
   dashboardEmpty: $('dashboardEmpty'), dashboardContent: $('dashboardContent'), monthlyChart: $('monthlyChart'),
   categoryChart: $('categoryChart'), categoryLegend: $('categoryLegend'), productRanking: $('productRanking'), historyList: $('historyList'),
@@ -33,6 +35,7 @@ const won = (value) => `${Number(value).toLocaleString('ko-KR')}원`;
 const saveCatalog = () => localStorage.setItem('quickSumCatalog', JSON.stringify(state.catalog));
 const savePurchases = () => localStorage.setItem('quickSumPurchases', JSON.stringify(state.purchases));
 const saveCart = () => localStorage.setItem('quickSumCart', JSON.stringify(state.cart));
+const saveCustomStores = () => localStorage.setItem('quickSumCustomStores', JSON.stringify(state.customStores));
 const localDate = (date = new Date()) => {
   const offset = date.getTimezoneOffset() * 60000;
   return new Date(date.getTime() - offset).toISOString().slice(0, 10);
@@ -240,7 +243,7 @@ function downloadFile(content, filename, type) {
 }
 
 function exportBackup() {
-  const backup = { app: 'barohapgye', version: 1, exportedAt: new Date().toISOString(), catalog: state.catalog, cart: state.cart, purchases: state.purchases };
+  const backup = { app: 'barohapgye', version: 2, exportedAt: new Date().toISOString(), catalog: state.catalog, cart: state.cart, purchases: state.purchases, customStores: state.customStores };
   downloadFile(JSON.stringify(backup, null, 2), `barohapgye-backup-${localDate()}.json`, 'application/json;charset=utf-8');
   localStorage.setItem('quickSumLastBackup', localDate());
   updateBackupStatus();
@@ -467,8 +470,12 @@ function findCatalogFingerprintMatch(fingerprint) {
   return matches.length===1?{code:matches[0][0],product:matches[0][1]}:null;
 }
 
+function selectedPurchaseStore() {
+  return els.purchaseStore.value === '__custom__' ? els.purchaseCustomStore.value.trim() : els.purchaseStore.value;
+}
+
 function findRecentStorePrice(code, name) {
-  const store = els.purchaseStore.value;
+  const store = selectedPurchaseStore();
   const target = normalizedProductName(name);
   const records = state.purchases.slice().sort((a, b) => b.date.localeCompare(a.date));
   for (const record of records) {
@@ -679,7 +686,7 @@ function presentRecognizedProduct(parsed, imageData, barcode = '', lowDetail = f
   els.productDialogPreview.src=imageData;els.productDialogPreview.hidden=false;
   showDetectedDiscount(offer);els.dialog.showModal();
   const shownPrice=offer.type!=='none'?offer.finalPrice:parsed.price;
-  const source=priceChanged?'동일 상품의 가격 변동 감지':offer.type!=='none'?(offer.conditional?`조건부 할인 · ${offer.condition}`:'조건 없는 할인 감지'):(!priceReadFromPhoto&&recentPrice!==null?`${els.purchaseStore.value}의 최근 저장 가격`:(!priceReadFromPhoto&&existing?'이전에 직접 저장한 가격':'화면에서 읽은 가격'));
+  const source=priceChanged?'동일 상품의 가격 변동 감지':offer.type!=='none'?(offer.conditional?`조건부 할인 · ${offer.condition}`:'조건 없는 할인 감지'):(!priceReadFromPhoto&&recentPrice!==null?`${selectedPurchaseStore()}의 최근 저장 가격`:(!priceReadFromPhoto&&existing?'이전에 직접 저장한 가격':'화면에서 읽은 가격'));
   showScanInsight({name:existing?.name||parsed.name,weight:parsed.weight||existing?.weight,category:existing?.category||inferCategory(parsed.name),price:shownPrice},source);
   els.scanStatus.textContent=`인식 결과를 확인하고 필요한 내용만 수정해주세요.${lowDetail?' 화면이 흐려 숫자를 확인해주세요.':''}`;return false;
 }
@@ -748,7 +755,8 @@ function validateBackup(raw) {
     const product = cleanProduct(item), quantity = Number(item?.quantity);
     if (product && Number.isInteger(quantity) && quantity > 0 && code.length <= 200) cart[code] = { ...product, code, quantity, promotion: cleanPromotion(item.promotion) };
   }
-  return { catalog, purchases, cart };
+  const customStores = Array.isArray(raw.customStores) ? raw.customStores.map((name) => String(name || '').trim().slice(0, 40)).filter(Boolean) : [];
+  return { catalog, purchases, cart, customStores };
 }
 
 async function prepareRestore(file) {
@@ -766,6 +774,7 @@ function applyRestore(mode) {
     state.catalog = backup.catalog;
     state.purchases = backup.purchases;
     state.cart = backup.cart;
+    state.customStores = backup.customStores;
   } else {
     state.catalog = { ...backup.catalog, ...state.catalog };
     const knownIds = new Set(state.purchases.map((record) => record.id));
@@ -774,8 +783,10 @@ function applyRestore(mode) {
       if (state.cart[code]) state.cart[code].quantity += item.quantity;
       else state.cart[code] = item;
     }
+    state.customStores = [...new Set([...state.customStores, ...backup.customStores])];
   }
-  saveCatalog(); savePurchases(); saveCart();
+  saveCatalog(); savePurchases(); saveCart(); saveCustomStores();
+  refreshPurchaseStoreList();
   refreshStoreFilter();
   state.pendingBackup = null;
   state.pendingCode = null;
@@ -811,8 +822,9 @@ function openPurchaseSummary() {
   const items = Object.values(state.cart);
   if (!items.length) return showToast('저장할 상품이 없습니다.');
   if (!els.purchaseDate.value) return showToast('이용 날짜를 선택해주세요.');
-  if (!els.purchaseStore.value) return showToast('이용 매장을 선택해주세요.');
-  const storeName = `${els.purchaseStore.value}${els.purchaseBranch.value.trim() ? ` · ${els.purchaseBranch.value.trim()}` : ''}`;
+  const selectedStore = selectedPurchaseStore();
+  if (!selectedStore) return showToast('이용 매장을 선택하거나 직접 입력해주세요.');
+  const storeName = `${selectedStore}${els.purchaseBranch.value.trim() ? ` · ${els.purchaseBranch.value.trim()}` : ''}`;
   els.checkoutMeta.textContent = `${els.purchaseDate.value} · ${storeName} · 총 ${items.reduce((sum, item) => sum + item.quantity, 0)}개`;
   els.checkoutItems.innerHTML = items.map((item) => {
     const discounted = discountedUnitPrice(item);
@@ -828,10 +840,21 @@ function openPurchaseSummary() {
 function saveCurrentPurchase() {
   const items = Object.values(state.cart);
   if (!items.length) return showToast('저장할 상품이 없습니다.');
+  const store = selectedPurchaseStore();
+  if (!store) return showToast('이용 매장을 선택하거나 직접 입력해주세요.');
+  if (els.purchaseStore.value === '__custom__' && !state.customStores.includes(store)) {
+    state.customStores.push(store);
+    state.customStores.sort((a, b) => a.localeCompare(b, 'ko'));
+    saveCustomStores();
+    refreshPurchaseStoreList();
+    els.purchaseStore.value = store;
+    els.purchaseCustomStore.value = '';
+    els.purchaseCustomStore.hidden = true;
+  }
   const record = {
     id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
     date: els.purchaseDate.value,
-    store: els.purchaseStore.value,
+    store,
     branch: els.purchaseBranch.value.trim(),
     total: items.reduce((sum, item) => sum + promotionTotal(item), 0),
     items: items.map((item) => ({ code: item.code, name: item.name, weight: item.weight || '', category: item.category || '미분류', price: item.price, quantity: item.quantity, promotion: item.promotion || null, total: promotionTotal(item) }))
@@ -1076,9 +1099,24 @@ function renderDashboard() {
   renderAdvancedAnalysis();
 }
 
+function allStoreNames() {
+  return [...new Set([...DEFAULT_STORES, ...state.customStores, ...state.purchases.map((record) => record.store || '미지정'), '미지정'])]
+    .map((name) => String(name || '').trim()).filter(Boolean).sort((a, b) => a.localeCompare(b, 'ko'));
+}
+
+function refreshPurchaseStoreList() {
+  const before = els.purchaseStore.value;
+  const customValue = els.purchaseCustomStore.value;
+  const stores = [...new Set([...DEFAULT_STORES, ...state.customStores])];
+  els.purchaseStore.innerHTML = stores.map((store) => `<option value="${escapeHtml(store)}">${escapeHtml(store)}</option>`).join('') + '<option value="__custom__">직접 입력</option>';
+  els.purchaseStore.value = stores.includes(before) ? before : '__custom__';
+  els.purchaseCustomStore.value = customValue;
+  els.purchaseCustomStore.hidden = els.purchaseStore.value !== '__custom__';
+}
+
 function refreshStoreFilter() {
   const selected = els.dashboardStore.value || 'all';
-  const stores = [...new Set(state.purchases.map((record) => record.store || '미지정'))].sort((a, b) => a.localeCompare(b, 'ko'));
+  const stores = allStoreNames();
   els.dashboardStore.innerHTML = '<option value="all">전체 매장</option>' + stores.map((store) => `<option value="${escapeHtml(store)}">${escapeHtml(store)}</option>`).join('');
   els.dashboardStore.value = stores.includes(selected) ? selected : 'all';
 }
@@ -1435,6 +1473,11 @@ els.resetButton.addEventListener('click', () => {
 });
 document.querySelectorAll('.view-tabs button').forEach((button) => button.addEventListener('click', () => showView(button.dataset.view)));
 els.savePurchaseButton.addEventListener('click', openPurchaseSummary);
+els.purchaseStore.addEventListener('change', () => {
+  const isCustom = els.purchaseStore.value === '__custom__';
+  els.purchaseCustomStore.hidden = !isCustom;
+  if (isCustom) els.purchaseCustomStore.focus();
+});
 els.cancelCheckout.addEventListener('click', () => els.checkoutDialog.close());
 els.confirmPurchaseSave.addEventListener('click', () => {
   els.checkoutDialog.close();
@@ -1526,6 +1569,7 @@ setMode('product');
 els.purchaseDate.value = localDate();
 els.dashboardMonth.value = localDate().slice(0, 7);
 state.cart = JSON.parse(localStorage.getItem('quickSumCart') || '{}');
+refreshPurchaseStoreList();
 refreshStoreFilter();
 updateBackupStatus();
 render();

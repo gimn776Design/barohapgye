@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=32">
+  <link rel="stylesheet" href="styles.css?v=33">
 </head>
 <body>
   <div class="background-world" aria-hidden="true">
@@ -164,6 +164,7 @@
       <div id="cameraStage" class="camera-stage">
         <video id="video" playsinline muted></video>
         <div class="scan-frame" aria-hidden="true"></div>
+        <div class="live-guide" aria-hidden="true"><b>가격표 전체를 사각형 안에</b><span>네 모서리가 보이도록 화면의 절반 이상 크기로 맞추세요</span></div>
         <div id="cameraPlaceholder" class="camera-placeholder">
           <span class="camera-icon">▣</span>
           <p>카메라를 켜면 바코드와 QR을 인식합니다.</p>
@@ -224,6 +225,7 @@
         <p id="dialogCode" class="code-label"></p>
       </div>
       <img id="productDialogPreview" class="product-dialog-preview" alt="등록할 상품 사진" hidden>
+      <div id="priceChangeNotice" class="price-change-notice" hidden><b>같은 상품의 다른 가격을 발견했습니다.</b><span id="priceChangeText"></span><small>기존 상품 정보를 불러왔습니다. 변동 내용을 확인하거나 수정한 뒤 등록하세요.</small></div>
       <label>상품명<input id="productName" placeholder="예: 코카콜라 500ml" required></label>
       <label>무게·용량·구성 수량 <small>(g / kg / ml / L / 개)</small><input id="productWeight" placeholder="예: 500g, 1.5kg, 1L × 4입"></label>
       <label>품목<select id="productCategory"><option>식품</option><option>축산</option><option>수산</option><option>농산</option><option>베이커리</option><option>음료</option><option>카페</option><option>생활용품</option><option>주방용품</option><option>건강·미용</option><option>반려동물</option><option>기타</option></select></label>
@@ -241,7 +243,7 @@
       <div class="dialog-actions">
         <button id="cancelDialog" class="secondary-button" type="button">취소</button>
         <button id="scanPriceDialog" class="secondary-button" type="button">가격 코드 스캔</button>
-        <button class="primary-button" type="submit">등록하고 담기</button>
+        <button id="productSubmitButton" class="primary-button" type="submit">등록하고 담기</button>
       </div>
     </form>
   </dialog>
@@ -322,7 +324,7 @@
 
   <div id="toast" class="toast" role="status"></div>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="app.js?v=32"></script>
+  <script src="app.js?v=33"></script>
 </body>
 </html>
 

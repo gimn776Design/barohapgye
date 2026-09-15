@@ -5,7 +5,7 @@ const state = { mode: 'product', pendingCode: null, pendingFingerprint: '', pend
 const $ = (id) => document.getElementById(id);
 const els = {
   video: $('video'), cameraStage: $('cameraStage'), cameraPlaceholder: $('cameraPlaceholder'), cameraButton: $('cameraButton'), captureScanButton: $('captureScanButton'),
-  productPhotoButton: $('productPhotoButton'), liveScanButton: $('liveScanButton'), liveCameraPanel: $('liveCameraPanel'), productPhoto: $('productPhoto'), productPhotoReady: $('productPhotoReady'), productPhotoPreview: $('productPhotoPreview'), productDialogPreview: $('productDialogPreview'),
+  liveScanButton: $('liveScanButton'), liveCameraPanel: $('liveCameraPanel'), productPhotoReady: $('productPhotoReady'), productPhotoPreview: $('productPhotoPreview'), productDialogPreview: $('productDialogPreview'),
   scanInsight: $('scanInsight'), scanInsightName: $('scanInsightName'), scanInsightDetail: $('scanInsightDetail'), scanInsightPrice: $('scanInsightPrice'), scanInsightSource: $('scanInsightSource'),
   switchModeButton: $('switchModeButton'), modeBadge: $('modeBadge'), scannerTitle: $('scannerTitle'), scanStatus: $('scanStatus'),
   quantityForm: $('quantityForm'), quantityInput: $('quantityInput'), quantityLabel: $('quantityLabel'), quantitySubmit: $('quantitySubmit'), cartList: $('cartList'), emptyState: $('emptyState'),
@@ -1320,23 +1320,6 @@ async function scanLoop() {
 els.cameraButton.addEventListener('click', () => state.stream ? stopCamera() : startCamera());
 els.liveScanButton.addEventListener('click', toggleLiveScan);
 els.captureScanButton.addEventListener('click', captureAndScan);
-els.productPhotoButton.addEventListener('click', () => els.productPhoto.click());
-els.productPhoto.addEventListener('change', async () => {
-  const file = els.productPhoto.files[0];
-  els.productPhoto.value = '';
-  if (!file) return;
-  els.productPhotoButton.disabled = true;
-  els.productPhotoButton.textContent = '사진 분석 중…';
-  try {
-    const registered = await recognizeProductPhoto(file);
-    showToast(registered ? '상품명과 금액을 자동 등록했어요.' : '읽지 못한 내용을 확인해주세요.');
-  } catch (_) {
-    showToast('상품·가격표를 읽지 못했습니다. 다시 촬영해주세요.');
-  } finally {
-    els.productPhotoButton.disabled = false;
-    els.productPhotoButton.textContent = '📷 스캔하기';
-  }
-});
 els.switchModeButton.addEventListener('click', () => setMode(state.mode === 'product' ? 'price' : 'product'));
 els.quantityForm.addEventListener('submit', (event) => {
   event.preventDefault();

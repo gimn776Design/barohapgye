@@ -1,7 +1,7 @@
 const storageIssues = new Map();
 const storageWriteApproved = new Set();
 let pendingStorageNotice = '';
-const APP_VERSION = '54';
+const APP_VERSION = '55';
 const ANONYMOUS_USAGE_KEY = 'quickSumAnonymousUsage';
 const SURVEY_STATE_KEY = 'quickSumSurveyState';
 const ONBOARDING_STATE_KEY = 'quickSumOnboardingState';
@@ -2522,17 +2522,40 @@ function canvasFile(canvas) {
 }
 
 function cropLiveGuideCanvas(source) {
-  const cropX=Math.round(source.width*.03),cropY=Math.round(source.height*.33),cropWidth=Math.round(source.width*.94),cropHeight=Math.round(source.height*.34);
+  const video = els.video.getBoundingClientRect();
+  const guide = els.video.parentElement.querySelector('.scan-frame').getBoundingClientRect();
+  if (!video.width || !video.height || !guide.width || !guide.height) return null;
+  // The centered cover preview hides part of the original camera frame.
+  const cover = Math.max(video.width / source.width, video.height / source.height);
+  const left = video.left + (video.width - source.width * cover) / 2;
+  const top = video.top + (video.height - source.height * cover) / 2;
+  const cropX = Math.max(0, Math.floor((guide.left + 3 - left) / cover));
+  const cropY = Math.max(0, Math.floor((guide.top + 3 - top) / cover));
+  const cropWidth = Math.min(source.width, Math.ceil((guide.right - 3 - left) / cover)) - cropX;
+  const cropHeight = Math.min(source.height, Math.ceil((guide.bottom - 3 - top) / cover)) - cropY;
+  if (cropWidth <= 0 || cropHeight <= 0) return null;
   const scale=Math.min(2,1600/Math.max(cropWidth,cropHeight));const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(cropWidth*scale));canvas.height=Math.max(1,Math.round(cropHeight*scale));
   const ctx=canvas.getContext('2d',{alpha:false});ctx.filter='grayscale(1) contrast(1.55)';ctx.drawImage(source,cropX,cropY,cropWidth,cropHeight,0,0,canvas.width,canvas.height);return canvas;
 }
 
-async function readLiveCandidate(canvas) {
-  const worker=await getProductOcrWorker();const focused=cropLiveGuideCanvas(canvas);
+async function readLiveCandidate(canvas, taskId) {
+  const focused = cropLiveGuideCanvas(canvas);
+  if (!focused) return {};
+  const worker = await getProductOcrWorker();
+  if (!isCurrentOcrTask(taskId)) return {};
   await worker.setParameters({tessedit_pageseg_mode:'6',tessedit_char_whitelist:'',preserve_interword_spaces:'1'});
-  const result=await worker.recognize(focused);
+  if (!isCurrentOcrTask(taskId)) return {};
+  const result = await worker.recognize(focused);
+  if (!isCurrentOcrTask(taskId)) return {};
+  const parsed = parseProductAndPrice(result.data.text || '');
+  parsed.name = cleanRecognizedProductName(parsed.name);
+  if (!parsed.name && parsed.price > 0) {
+    const title = await worker.recognize(cropProductTitleLine(focused));
+    if (!isCurrentOcrTask(taskId)) return {};
+    parsed.name = cleanRecognizedProductName(parseProductAndPrice(title.data.text || '').name);
+  }
   await worker.setParameters({tessedit_pageseg_mode:'11',preserve_interword_spaces:'1'});
-  const parsed=parseProductAndPrice(result.data.text||'');parsed.name=cleanRecognizedProductName(parsed.name);return parsed;
+  return parsed;
 }
 
 async function liveTextScanLoop(taskId) {
@@ -2546,7 +2569,7 @@ async function liveTextScanLoop(taskId) {
       if (canvas) {
         if (!isCurrentOcrTask(taskId)) return;
         setScanStatus('화면에 보이는 내용을 한 번에 빠르게 읽는 중입니다…', 'processing');
-        const parsed = await readLiveCandidate(canvas);
+        const parsed = await readLiveCandidate(canvas, taskId);
         if (!isCurrentOcrTask(taskId)) return;
         if (parsed.name || Number(parsed.price) > 0) {
           state.pendingInputMethod = 'live';
@@ -2581,8 +2604,12 @@ async function toggleLiveScan() {
   if (!started || !state.stream) return;
   const taskId = nextOcrTask();
   state.liveScanning=true; state.liveCandidate={signature:'',count:0};
-  setScanStatus('가격표 전체를 초록 영역에 넣고 화면 절반 이상 크기로 가까이 맞춰주세요.', 'camera-ready');
-  void liveTextScanLoop(taskId);
+  setScanStatus('상품명과 가격을 초록색 사각형 안에 맞춰 주세요. 잠시 후 자동 인식합니다.', 'camera-ready');
+  els.cameraStage.scrollIntoView({ block: 'center', behavior: 'instant' });
+  // Give the preview time to paint and the user a moment to align the label.
+  setTimeout(() => {
+    if (isCurrentOcrTask(taskId) && state.liveScanning) void liveTextScanLoop(taskId);
+  }, 1200);
 }
 
 async function createBarcodeDetector() {

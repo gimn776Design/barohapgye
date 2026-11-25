@@ -1,4 +1,4 @@
-const APP_VERSION = '55';
+const APP_VERSION = '56';
 const CACHE_PREFIX = 'barohapgye-';
 const SHELL_CACHE = `${CACHE_PREFIX}shell-v${APP_VERSION}`;
 const OCR_CACHE = `${CACHE_PREFIX}ocr-v${APP_VERSION}`;

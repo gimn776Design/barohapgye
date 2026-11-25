@@ -1,7 +1,7 @@
 const storageIssues = new Map();
 const storageWriteApproved = new Set();
 let pendingStorageNotice = '';
-const APP_VERSION = '55';
+const APP_VERSION = '56';
 const ANONYMOUS_USAGE_KEY = 'quickSumAnonymousUsage';
 const SURVEY_STATE_KEY = 'quickSumSurveyState';
 const ONBOARDING_STATE_KEY = 'quickSumOnboardingState';
@@ -2484,6 +2484,7 @@ async function startCamera(barcodeMode = true) {
     if (capabilities.focusMode?.includes('continuous')) {
       await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
     }
+    if (requestId !== state.cameraRequestId) return false;
     els.cameraPlaceholder.hidden = true;
     els.cameraStage.classList.add('active');
     els.cameraButton.textContent = '카메라 끄기';
@@ -2598,10 +2599,12 @@ async function liveTextScanLoop(taskId) {
 
 async function toggleLiveScan() {
   if (state.liveScanning) { stopCamera({ status: '무음 자동 인식을 중지했습니다.' }); return; }
-  stopCamera();
-  els.liveCameraPanel.classList.add('live-visible'); els.liveScanButton.classList.add('active'); els.liveScanButton.textContent='자동 인식 중지';
+  if (state.cameraStarting) return;
   const started = await startCamera(false);
   if (!started || !state.stream) return;
+  els.liveCameraPanel.classList.add('live-visible');
+  els.liveScanButton.classList.add('active');
+  els.liveScanButton.textContent = '자동 인식 중지';
   const taskId = nextOcrTask();
   state.liveScanning=true; state.liveCandidate={signature:'',count:0};
   setScanStatus('상품명과 가격을 초록색 사각형 안에 맞춰 주세요. 잠시 후 자동 인식합니다.', 'camera-ready');

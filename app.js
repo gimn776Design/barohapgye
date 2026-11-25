@@ -1,7 +1,7 @@
 const storageIssues = new Map();
 const storageWriteApproved = new Set();
 let pendingStorageNotice = '';
-const APP_VERSION = '57';
+const APP_VERSION = '58';
 const ANONYMOUS_USAGE_KEY = 'quickSumAnonymousUsage';
 const SURVEY_STATE_KEY = 'quickSumSurveyState';
 const ONBOARDING_STATE_KEY = 'quickSumOnboardingState';
@@ -1128,13 +1128,21 @@ function cleanProduct(value) {
   return { name: value.name.slice(0, 200), price, weight, category: typeof value.category === 'string' ? value.category.slice(0, 80) : '미분류', ...(scanFingerprint ? { scanFingerprint } : {}), ...(image ? { image } : {}) };
 }
 
-function parseProductAndPrice(text) {
+function parseProductAndPrice(text, { liveLabel = false } = {}) {
   const lines = String(text || '').split(/\r?\n/).map((line) => line.replace(/\s+/g, ' ').trim()).filter(Boolean);
   const priced = [];
+  const unitRate = /단\s*위\s*가\s*격|단\s*가|\d+\s*(?:kg|g|ml|l|개)\s*(?:당|기준)/i;
+  const saleLabel = /판매\s*가|판매\s*가격|행사\s*가|할인\s*가|최종\s*(?:가|가격)|구매\s*가/;
   for (const line of lines) {
+    if (liveLabel && /바\s*코\s*드|상품\s*코드/.test(line)) continue;
     for (const match of line.matchAll(/(?:₩|￦)\s*(\d{1,3}(?:,\d{3})+|\d{3,7})(?!\d)|(?<!\d)(\d{1,3}(?:,\d{3})+|\d{3,7})\s*원|(?<!\d)(\d{1,3}(?:,\d{3})+)(?!\d)/g)) {
       const value = Number((match[1] || match[2] || match[3]).replaceAll(',', ''));
-      if (value >= 100 && value <= 10000000) priced.push({ value, line, score: /행사|할인|판매|회원|최종|구매가/.test(line) ? 2 : 1 });
+      const context = line.slice(0, match.index);
+      if (liveLabel && (unitRate.test(line) || /할인\s*액|절약|포인트|적립/.test(context) || /[\d,.]$/.test(context))) continue;
+      const score = liveLabel
+        ? (saleLabel.test(context) ? 5 : /정상\s*가|기존\s*가/.test(context) ? 1 : match[1] || match[2] ? 3 : 2)
+        : (/행사|할인|판매|회원|최종|구매가/.test(line) ? 2 : 1);
+      if (value >= 100 && value <= 10000000) priced.push({ value, line, score });
     }
   }
   priced.sort((a, b) => b.score - a.score || b.value - a.value);
@@ -1145,6 +1153,7 @@ function parseProductAndPrice(text) {
     }
   }
   const nameCandidates = lines.map((line, index) => {
+    if (liveLabel && (unitRate.test(line) || /^(?:정상\s*가|판매\s*가|행사\s*가|할인\s*액|최종\s*가|회원\s*가|바\s*코\s*드|상품\s*코드|원산지|제조원|유통기한)|결제\s*시|적립/.test(line))) return { line: '', score: 0 };
     const cleaned = line
     .replace(/(?:₩|￦)?\s*\d{1,3}(?:,\d{3})+\s*원?/g, ' ')
     .replace(/\d{3,7}\s*원/g, ' ')
@@ -1163,7 +1172,7 @@ function parseProductAndPrice(text) {
     return { line: cleaned, score };
   }).filter(({ line }) => /[가-힣A-Za-z]{2}/.test(line) && !/^\d[\d\s.,%-]*$/.test(line))
     .sort((a, b) => b.score - a.score || Math.min(b.line.length, 45) - Math.min(a.line.length, 45));
-  const weightMatch = String(text || '').match(/(\d+(?:[.,]\d+)?)\s*(kg|㎏|킬로그램|g|그램|ml|mL|㎖|l|L|리터)(?![A-Za-z])/i);
+  const weightMatch = (liveLabel ? lines.filter((line) => !unitRate.test(line)).join('\n') : String(text || '')).match(/(\d+(?:[.,]\d+)?)\s*(kg|㎏|킬로그램|g|그램|ml|mL|㎖|l|L|리터)(?![A-Za-z])/i);
   let weightNumber = weightMatch?.[1]?.replace(',', '.') || '';
   const weightUnit = weightMatch?.[2]?.replace(/킬로그램|㎏/i, 'kg').replace(/그램/i, 'g').replace(/㎖/i, 'ml').replace(/리터/i, 'L') || '';
   if (/kg/i.test(weightUnit) && /^\d{4}$/.test(weightNumber) && Number(weightNumber) < 10000) weightNumber = `${weightNumber[0]}.${weightNumber.slice(1)}`;
@@ -2549,14 +2558,24 @@ async function readLiveCandidate(canvas, taskId) {
   if (!isCurrentOcrTask(taskId)) return {};
   const result = await worker.recognize(focused);
   if (!isCurrentOcrTask(taskId)) return {};
-  const parsed = parseProductAndPrice(result.data.text || '');
+  const parsed = parseProductAndPrice(result.data.text || '', { liveLabel: true });
   parsed.name = cleanRecognizedProductName(parsed.name);
   if (!parsed.name && parsed.price > 0) {
     const title = await worker.recognize(cropProductTitleLine(focused));
     if (!isCurrentOcrTask(taskId)) return {};
-    parsed.name = cleanRecognizedProductName(parseProductAndPrice(title.data.text || '').name);
+    parsed.name = cleanRecognizedProductName(parseProductAndPrice(title.data.text || '', { liveLabel: true }).name);
   }
   await worker.setParameters({tessedit_pageseg_mode:'11',preserve_interword_spaces:'1'});
+  if (!isCurrentOcrTask(taskId)) return {};
+  if ('BarcodeDetector' in window) {
+    try {
+      const detector = await createBarcodeDetector();
+      if (!isCurrentOcrTask(taskId)) return {};
+      const codes = await detector.detect(focused);
+      const values = [...new Set(codes.filter((code) => /^(ean_13|ean_8|upc_a|upc_e)$/.test(code.format)).map((code) => code.rawValue))];
+      if (values.length === 1 && isCurrentOcrTask(taskId)) parsed.barcode = values[0];
+    } catch (_) { /* Text recognition remains available. */ }
+  }
   return parsed;
 }
 
@@ -2573,7 +2592,7 @@ async function liveTextScanLoop(taskId) {
         setScanStatus('화면에 보이는 내용을 한 번에 빠르게 읽는 중입니다…', 'processing');
         const parsed = await readLiveCandidate(canvas, taskId);
         if (!isCurrentOcrTask(taskId)) return;
-        if (parsed.name || Number(parsed.price) > 0) {
+        if (Number(parsed.price) > 0 || (parsed.barcode && state.catalog[parsed.barcode])) {
           state.pendingInputMethod = 'live';
           const file = await canvasFile(canvas);
           if (!isCurrentOcrTask(taskId)) return;
@@ -2581,7 +2600,7 @@ async function liveTextScanLoop(taskId) {
           if (!isCurrentOcrTask(taskId)) return;
           recordUsage('ocr_success', { inputMethod: 'live', success: true, durationMs: performance.now() - startedAt });
           stopCamera({ invalidateOcr: false });
-          if (imageData && isCurrentOcrTask(taskId)) presentRecognizedProduct(parsed, imageData, '', false);
+          if (imageData && isCurrentOcrTask(taskId)) presentRecognizedProduct(parsed, imageData, parsed.barcode || '', false);
           return;
         }
         recordUsage('ocr_failure', { inputMethod: 'live', success: false, durationMs: performance.now() - startedAt, errorType: 'not-found' });

@@ -1,7 +1,7 @@
 const storageIssues = new Map();
 const storageWriteApproved = new Set();
 let pendingStorageNotice = '';
-const APP_VERSION = '58';
+const APP_VERSION = '59';
 const ANONYMOUS_USAGE_KEY = 'quickSumAnonymousUsage';
 const SURVEY_STATE_KEY = 'quickSumSurveyState';
 const ONBOARDING_STATE_KEY = 'quickSumOnboardingState';
@@ -1330,7 +1330,7 @@ function scanFingerprint(product) {
 }
 
 function cleanRecognizedProductName(value) {
-  const text=String(value||'').replace(/^[\d\W_]+|[\W_]+$/g,' ').replace(/\s+/g,' ').trim();
+  const text=String(value||'').replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N})]+$/gu,' ').replace(/\s+/g,' ').trim();
   const korean=(text.match(/[가-힣]/g)||[]).length, latin=(text.match(/[A-Za-z]/g)||[]).length;
   const latinTokens=text.match(/[A-Za-z]{1,}/g)||[];
   if(korean>=2 && latin>korean && latinTokens.length>=5){const koreanOnly=(text.match(/[가-힣]{2,}/g)||[]).join(' ');const kind=productKind(koreanOnly,'');return kind||koreanOnly;}
@@ -1508,14 +1508,15 @@ function cropTightPriceLabelCanvas(source) {
   return canvas;
 }
 
-function cropProductTitleLine(source) {
+function cropProductTitleLine(source, enlarge = false) {
   const cropX = Math.round(source.width * .08);
   const cropY = Math.round(source.height * .14);
   const cropWidth = Math.round(source.width * .84);
   const cropHeight = Math.round(source.height * .43);
   const canvas = document.createElement('canvas');
-  canvas.width = cropWidth;
-  canvas.height = cropHeight;
+  const scale = enlarge ? Math.min(2, Math.max(1, 1800 / cropWidth)) : 1;
+  canvas.width = Math.max(1, Math.round(cropWidth * scale));
+  canvas.height = Math.max(1, Math.round(cropHeight * scale));
   const ctx = canvas.getContext('2d', { alpha: false });
   ctx.filter = 'grayscale(1) contrast(2)';
   ctx.drawImage(source, cropX, cropY, cropWidth, cropHeight, 0, 0, canvas.width, canvas.height);
@@ -1591,6 +1592,7 @@ function renderPriceCandidates(candidates = [], selectedPrice = '') {
 function showRecognitionWarnings(parsed) {
   const messages = [];
   if (!String(parsed?.name || '').trim()) messages.push('상품명을 인식하지 못했습니다. 상품명을 직접 입력해 주세요.');
+  else if (parsed.nameNeedsReview) messages.push('상품명 인식 결과가 일치하지 않습니다. 가격표의 상품명과 맞는지 확인해 주세요.');
   if (!(Number(parsed?.price) > 0)) messages.push('가격을 정확하게 인식하지 못했습니다. 장바구니에 담기 전에 실제 가격을 확인해 주세요.');
   els.recognitionWarning.textContent = messages.join(' ');
   els.recognitionWarning.hidden = messages.length === 0;
@@ -1681,7 +1683,7 @@ function presentRecognizedProduct(parsed, imageData, barcode = '', lowDetail = f
   els.productCategory.value=existing?.category||inferCategory(parsed.name);
   els.productDialogPreview.src=imageData;els.productDialogPreview.hidden=false;
   renderPriceCandidates(parsed.priceCandidates || [], els.productPrice.value);
-  showRecognitionWarnings({ name: els.productName.value, price: els.productPrice.value });
+  showRecognitionWarnings({ name: els.productName.value, price: els.productPrice.value, nameNeedsReview: parsed.nameNeedsReview });
   showDetectedDiscount(offer);openAccessibleDialog(els.dialog, els.productName);
   const shownPrice=offer.type!=='none'?offer.finalPrice:parsed.price;
   const source=priceChanged?'동일 상품의 가격 변동 감지':offer.type!=='none'?(offer.conditional?`조건부 할인 · ${offer.condition}`:'조건 없는 할인 감지'):(!priceReadFromPhoto&&recentPrice!==null?`${selectedPurchaseStore()}의 최근 저장 가격`:(!priceReadFromPhoto&&existing?'이전에 직접 저장한 가격':'화면에서 읽은 가격'));
@@ -2560,10 +2562,14 @@ async function readLiveCandidate(canvas, taskId) {
   if (!isCurrentOcrTask(taskId)) return {};
   const parsed = parseProductAndPrice(result.data.text || '', { liveLabel: true });
   parsed.name = cleanRecognizedProductName(parsed.name);
-  if (!parsed.name && parsed.price > 0) {
-    const title = await worker.recognize(cropProductTitleLine(focused));
+  if (parsed.price > 0) {
+    let title;
+    try { title = await worker.recognize(cropProductTitleLine(focused, true)); } catch (_) { /* Keep the first OCR result. */ }
     if (!isCurrentOcrTask(taskId)) return {};
-    parsed.name = cleanRecognizedProductName(parseProductAndPrice(title.data.text || '', { liveLabel: true }).name);
+    const secondName = cleanRecognizedProductName(parseProductAndPrice(title?.data?.text || '', { liveLabel: true }).name);
+    if (parsed.name && secondName) parsed.nameNeedsReview = normalizedProductName(parsed.name) !== normalizedProductName(secondName);
+    else if (secondName) parsed.name = secondName;
+    else if (parsed.name) parsed.nameNeedsReview = true;
   }
   await worker.setParameters({tessedit_pageseg_mode:'11',preserve_interword_spaces:'1'});
   if (!isCurrentOcrTask(taskId)) return {};

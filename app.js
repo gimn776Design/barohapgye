@@ -1,7 +1,7 @@
 const storageIssues = new Map();
 const storageWriteApproved = new Set();
 let pendingStorageNotice = '';
-const APP_VERSION = '56';
+const APP_VERSION = '57';
 const ANONYMOUS_USAGE_KEY = 'quickSumAnonymousUsage';
 const SURVEY_STATE_KEY = 'quickSumSurveyState';
 const ONBOARDING_STATE_KEY = 'quickSumOnboardingState';
@@ -2423,6 +2423,7 @@ function stopCamera({ invalidateOcr = true, status = '' } = {}) {
   els.cameraStage.classList.remove('active', 'capturing');
   els.cameraButton.textContent = '카메라 켜기';
   els.liveCameraPanel.classList.remove('live-visible');
+  els.liveCameraPanel.setAttribute('aria-hidden', 'true');
   els.liveScanButton.classList.remove('active');
   els.liveScanButton.textContent = '◎ 갖다 대고 무음 자동 인식';
   if (invalidateOcr && state.photoOcrBusy) {
@@ -2598,13 +2599,14 @@ async function liveTextScanLoop(taskId) {
 }
 
 async function toggleLiveScan() {
-  if (state.liveScanning) { stopCamera({ status: '무음 자동 인식을 중지했습니다.' }); return; }
-  if (state.cameraStarting) return;
+  if (state.cameraStarting || state.liveScanning) return;
   const started = await startCamera(false);
   if (!started || !state.stream) return;
   els.liveCameraPanel.classList.add('live-visible');
+  els.liveCameraPanel.setAttribute('aria-hidden', 'false');
   els.liveScanButton.classList.add('active');
-  els.liveScanButton.textContent = '자동 인식 중지';
+  els.liveScanButton.textContent = '무음 자동 인식 중';
+  els.liveScanButton.disabled = true;
   const taskId = nextOcrTask();
   state.liveScanning=true; state.liveCandidate={signature:'',count:0};
   setScanStatus('상품명과 가격을 초록색 사각형 안에 맞춰 주세요. 잠시 후 자동 인식합니다.', 'camera-ready');
@@ -2689,6 +2691,7 @@ async function scanLoop() {
 
 els.cameraButton.addEventListener('click', () => state.stream ? stopCamera({ status: '카메라를 종료했습니다.' }) : startCamera());
 els.liveScanButton.addEventListener('click', toggleLiveScan);
+$('stopLiveScanButton').addEventListener('click', () => stopCamera({ status: '무음 자동 인식을 중지했습니다.' }));
 els.manualProductButton.addEventListener('click', () => { stopCamera({ status: '카메라를 종료하고 직접 입력으로 전환했습니다.' }); openManualProductDialog(); });
 els.productPhotoButton.addEventListener('click', () => { stopCamera({ status: '카메라를 종료하고 사진 선택으로 전환했습니다.' }); els.productPhoto.click(); });
 els.productPhoto.addEventListener('cancel', () => setScanStatus('사진 선택을 취소했습니다. 기존 장바구니는 그대로 유지됩니다.', 'cancelled'));

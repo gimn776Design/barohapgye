@@ -12,7 +12,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=56">
+  <link rel="stylesheet" href="styles.css?v=57">
 </head>
 <body>
   <div class="background-world" aria-hidden="true">
@@ -214,6 +214,7 @@
         <button id="cameraButton" class="primary-button" type="button">카메라 켜기</button>
         <button id="switchModeButton" class="secondary-button" type="button">가격 코드 스캔</button>
       </div>
+      <button id="stopLiveScanButton" class="live-scan-button" type="button">무음 인식 중지</button>
       <button id="captureScanButton" class="capture-scan-button" type="button">B. 바코드·QR 촬영해서 등록</button>
       </div>
       <div class="combined-scan-note"><b>가격표에 할인이 함께 있나요?</b><span>무음 스캔이 상품명·가격과 함께 할인율, 할인액, 카드·회원 조건을 분석합니다.</span></div>
@@ -415,7 +416,7 @@
   </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="vendor/tesseract/tesseract.min.js?v=56"></script>
-  <script src="app.js?v=56"></script>
+  <script src="vendor/tesseract/tesseract.min.js?v=57"></script>
+  <script src="app.js?v=57"></script>
 </body>
 </html>
